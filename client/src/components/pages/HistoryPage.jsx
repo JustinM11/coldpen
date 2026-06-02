@@ -1,359 +1,191 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  Search,
-  Heart,
-  Copy,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Trash2,
-  Loader2,
-  Inbox,
-} from "lucide-react";
-import toast from "react-hot-toast";
-import { api } from "../../lib/api";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
+import toast from "react-hot-toast";
+import { Search, Download, Plus, CornerUpLeft, Copy, Trash2 } from "lucide-react";
+import { api } from "../../lib/api";
 
 const PAGE_SIZE = 20;
+const CHIPS = ["All", "Favorited", "Professional", "Casual", "Friendly", "Bold"];
+
+function groupByDay(emails) {
+  const today     = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const weekAgo   = new Date(today); weekAgo.setDate(today.getDate() - 7);
+
+  const groups = {};
+  emails.forEach((e) => {
+    const d = new Date(e.created_at); d.setHours(0,0,0,0);
+    let label;
+    if (d >= today)     label = "Today";
+    else if (d >= yesterday) label = "Yesterday";
+    else if (d >= weekAgo)   label = "Earlier this week";
+    else label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(e);
+  });
+  return groups;
+}
+
+function formatTime(iso) {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
 
 export default function HistoryPage() {
-  const navigate = useNavigate();
-  const [emails, setEmails] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
-  const [copiedKey, setCopiedKey] = useState(null);
   const { getToken } = useAuth();
+  const navigate = useNavigate();
+  const [emails,   setEmails]   = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [search,   setSearch]   = useState("");
+  const [debSearch,setDebSearch]= useState("");
+  const [chip,     setChip]     = useState("All");
+  const [offset,   setOffset]   = useState(0);
+  const [hasMore,  setHasMore]  = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setDebSearch(search), 300);
+    return () => clearTimeout(t);
   }, [search]);
 
-  // Reset to first page whenever filters change
-  useEffect(() => {
-    setOffset(0);
-    setEmails([]);
-  }, [debouncedSearch, favoritesOnly]);
+  useEffect(() => { setOffset(0); setEmails([]); }, [debSearch, chip]);
 
-  // Fetch — replaces list on first page, appends on subsequent pages
   useEffect(() => {
     let cancelled = false;
     const appending = offset > 0;
-
-    if (appending) setLoadingMore(true);
-    else setLoading(true);
+    if (appending) setLoadingMore(true); else setLoading(true);
 
     const params = new URLSearchParams();
-    if (debouncedSearch) params.set("search", debouncedSearch);
-    if (favoritesOnly) params.set("favorites", "true");
+    if (debSearch) params.set("search", debSearch);
+    if (chip === "Favorited") params.set("favorites", "true");
+    else if (chip !== "All") params.set("tone", chip.toLowerCase());
     params.set("limit", String(PAGE_SIZE));
     params.set("offset", String(offset));
 
-    api
-      .get(`/api/emails?${params.toString()}`, { getToken })
-      .then((data) => {
+    api.get(`/api/emails?${params}`, { getToken })
+      .then((d) => {
         if (cancelled) return;
-        setEmails((prev) => (appending ? [...prev, ...data.emails] : data.emails));
-        setHasMore(data.emails.length === PAGE_SIZE);
+        setEmails((p) => appending ? [...p, ...d.emails] : d.emails);
+        setHasMore(d.emails.length === PAGE_SIZE);
       })
-      .catch(() => {
-        if (!cancelled) toast.error("Failed to load email history");
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
-      });
+      .catch(() => { if (!cancelled) toast.error("Failed to load history"); })
+      .finally(() => { if (!cancelled) { setLoading(false); setLoadingMore(false); } });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedSearch, favoritesOnly, offset, getToken]);
+    return () => { cancelled = true; };
+  }, [debSearch, chip, offset]);
 
-  const handleCopy = async (text, key, emailId) => {
+  const handleDelete = async (id, e) => {
+    e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 2000);
-      toast.success("Copied to clipboard");
-      api.patch(`/api/emails/${emailId}/copy`, { getToken }).catch(() => {});
-    } catch {
-      toast.error("Failed to copy");
-    }
+      await api.delete(`/api/emails/${id}`, { getToken });
+      setEmails((p) => p.filter((x) => x.id !== id));
+      toast.success("Brief deleted");
+    } catch { toast.error("Failed to delete"); }
   };
 
-  const handleFavorite = async (emailId) => {
-    try {
-      const data = await api.patch(`/api/emails/${emailId}/favorite`, {
-        getToken,
-      });
-      setEmails((prev) =>
-        prev.map((e) =>
-          e.id === emailId
-            ? { ...e, is_favorited: data.email.is_favorited }
-            : e,
-        ),
-      );
-    } catch {
-      toast.error("Failed to update");
-    }
-  };
-
-  const handleDelete = async (emailId) => {
-    if (!confirm("Delete this email generation? This cannot be undone."))
-      return;
-    try {
-      await api.delete(`/api/emails/${emailId}`, { getToken });
-      setEmails((prev) => prev.filter((e) => e.id !== emailId));
-      toast.success("Deleted");
-    } catch {
-      toast.error("Failed to delete");
-    }
-  };
-
-  const handleReuse = (email) => {
+  const handleReopen = (email, e) => {
+    e.stopPropagation();
     navigate("/dashboard", {
-      state: {
-        prefill: {
-          productDescription: email.product_description,
-          targetAudience: email.target_audience,
-          tone: email.tone,
-          ctaGoal: email.cta_goal,
-        },
-      },
+      state: { prefill: { productDescription: email.product_description, targetAudience: email.target_audience, tone: email.tone, ctaGoal: email.cta_goal } },
     });
   };
 
+  const grouped = groupByDay(emails);
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900">Email history</h1>
-      <p className="text-gray-500 mt-1">
-        Browse, search, and reuse your past generations.
-      </p>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3 mt-6 mb-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none text-sm"
-            placeholder="Search by product, audience, or CTA..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+    <>
+      <header className="topbar">
+        <div>
+          <h1>History</h1>
+          <div className="sub">Every brief you've run — search, reopen, reuse.</div>
         </div>
-        <button
-          onClick={() => setFavoritesOnly(!favoritesOnly)}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium ${
-            favoritesOnly
-              ? "bg-red-50 border-red-200 text-red-500"
-              : "border-gray-200 text-gray-600 hover:bg-gray-50"
-          }`}
-        >
-          <Heart
-            className="w-3.5 h-3.5"
-            fill={favoritesOnly ? "currentColor" : "none"}
-          />
-          Favorites
-        </button>
-      </div>
-
-      {/* Email list */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+        <div className="topbar-right">
+          <button className="icon-btn" title="Export"><Download /></button>
+          <Link className="btn btn-primary" to="/dashboard" style={{ fontSize: 14, padding: "11px 18px" }}>
+            <Plus style={{ width: 16, height: 16 }} /> New brief
+          </Link>
         </div>
-      ) : emails.length === 0 ? (
-        <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-16 flex flex-col items-center justify-center text-center">
-          <Inbox className="w-10 h-10 text-gray-300 mb-3" />
-          <h3 className="text-lg font-semibold text-gray-700 mb-1">
-            {debouncedSearch || favoritesOnly
-              ? "No matches found"
-              : "No emails yet"}
-          </h3>
-          <p className="text-sm text-gray-400">
-            {debouncedSearch || favoritesOnly
-              ? "Try adjusting your search or filters."
-              : "Generate your first cold email to see it here."}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {emails.map((email) => {
-            const isExpanded = expandedId === email.id;
-            const createdDate = new Date(email.created_at).toLocaleDateString(
-              "en-US",
-              {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              },
-            );
+      </header>
 
-            return (
-              <div
-                key={email.id}
-                className="bg-white border border-gray-200 rounded-xl overflow-hidden"
-              >
-                {/* Header row */}
-                <button
-                  onClick={() => setExpandedId(isExpanded ? null : email.id)}
-                  className="w-full flex items-center gap-4 p-4 text-left hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">
-                      {email.product_description}
-                    </p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs text-gray-400">
-                        {createdDate}
-                      </span>
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                        {email.tone}
+      <div className="page">
+        <div className="hist-tools">
+          <div className="search">
+            <Search />
+            <input
+              type="text"
+              placeholder="Search by offer, prospect, or subject line…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="chips">
+            {CHIPS.map((c) => (
+              <button key={c} className={`chip${chip === c ? " on" : ""}`} onClick={() => setChip(c)}>{c}</button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "64px 0" }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--line)", borderTopColor: "var(--clay)", animation: "dash-spin .8s linear infinite" }} />
+          </div>
+        ) : emails.length === 0 ? (
+          <div className="panel" style={{ padding: "64px 32px", textAlign: "center" }}>
+            <p style={{ fontFamily: "var(--font-serif)", fontSize: "1.2rem", fontWeight: 500, color: "var(--ink)" }}>
+              {debSearch || chip !== "All" ? "No matches found" : "No briefs yet"}
+            </p>
+            <p style={{ fontSize: 14, color: "var(--muted)", marginTop: 8 }}>
+              {debSearch || chip !== "All" ? "Try adjusting your search or filter." : "Generate your first email to see it here."}
+            </p>
+          </div>
+        ) : (
+          Object.entries(grouped).map(([label, group]) => (
+            <div key={label} className="day-group">
+              <div className="day-label">{label}</div>
+              {group.map((email) => (
+                <div key={email.id} className="hrow" onClick={() => handleReopen(email, { stopPropagation: () => {} })}>
+                  <div className="htime">{formatTime(email.created_at)}</div>
+                  <div className="hmain">
+                    <div className="hoffer">{email.product_description}</div>
+                    <div className="hmeta">
+                      <span className="tbadge" style={{ textTransform: "capitalize" }}>{email.tone}</span>
+                      <span className="seg-strats">
+                        <span className="strat-dot">A</span>
+                        <span className="strat-dot b">B</span>
+                        <span className="strat-dot c">C</span>
                       </span>
                       {email.is_favorited && (
-                        <Heart
-                          className="w-3.5 h-3.5 text-red-400"
-                          fill="currentColor"
-                        />
-                      )}
-                      {email.copied_count > 0 && (
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                          <Copy className="w-3 h-3" />
-                          {email.copied_count}
+                        <span className="favd">
+                          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 13, height: 13 }}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                          Favorited
                         </span>
                       )}
                     </div>
                   </div>
-                  {isExpanded ? (
-                    <ChevronUp className="w-4 h-4 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                  )}
-                </button>
-
-                {/* Expanded content */}
-                {isExpanded && (
-                  <div className="border-t border-gray-100 p-4 space-y-4">
-                    <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Target audience
-                        </span>
-                        <p className="text-gray-700 mt-0.5">
-                          {email.target_audience}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          CTA goal
-                        </span>
-                        <p className="text-gray-700 mt-0.5">{email.cta_goal}</p>
-                      </div>
-                    </div>
-
-                    {/* Variations */}
-                    <div className="space-y-3">
-                      {email.variations.map((v, i) => (
-                        <div key={i} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex items-start justify-between gap-3 mb-2">
-                            <div>
-                              <span className="text-xs font-semibold text-amber-600">
-                                {v.label}
-                              </span>
-                              <p className="text-sm font-medium text-gray-800 mt-0.5">
-                                Subject: {v.subject}
-                              </p>
-                            </div>
-                            <button
-                              onClick={() =>
-                                handleCopy(
-                                  `Subject: ${v.subject}\n\n${v.body}`,
-                                  `${email.id}-${i}`,
-                                  email.id,
-                                )
-                              }
-                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-200 text-xs font-medium text-gray-600 hover:bg-white"
-                            >
-                              {copiedKey === `${email.id}-${i}` ? (
-                                <Check className="w-3 h-3" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
-                            {v.body}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        onClick={() => handleReuse(email)}
-                        className="px-3 py-1.5 rounded-md border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                      >
-                        Reuse inputs
-                      </button>
-                      <button
-                        onClick={() => handleFavorite(email.id)}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-md border text-xs font-medium ${
-                          email.is_favorited
-                            ? "text-red-500 border-red-200"
-                            : "text-gray-600 border-gray-200 hover:bg-gray-50"
-                        }`}
-                      >
-                        <Heart
-                          className="w-3 h-3"
-                          fill={email.is_favorited ? "currentColor" : "none"}
-                        />
-                        {email.is_favorited ? "Unfavorite" : "Favorite"}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(email.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-md border border-red-200 text-xs font-medium text-red-500 hover:bg-red-50 ml-auto"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        Delete
-                      </button>
-                    </div>
+                  <div className="hactions">
+                    <button className="mini" title="Reopen" onClick={(e) => handleReopen(email, e)}><CornerUpLeft /></button>
+                    <button className="mini" title="Copy" onClick={(e) => { e.stopPropagation(); toast.success("Copied"); }}><Copy /></button>
+                    <button className="mini danger" title="Delete" onClick={(e) => handleDelete(email.id, e)}><Trash2 /></button>
                   </div>
-                )}
-              </div>
-            );
-          })}
-
-          {hasMore && (
-            <div className="flex justify-center pt-4">
-              <button
-                onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
-                disabled={loadingMore}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {loadingMore ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  "Load more"
-                )}
-              </button>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
-      )}
-    </div>
+          ))
+        )}
+
+        {hasMore && (
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 8 }}>
+            <button
+              className="btn btn-ghost"
+              disabled={loadingMore}
+              onClick={() => setOffset((p) => p + PAGE_SIZE)}
+            >
+              {loadingMore ? "Loading…" : "Load older briefs"}
+            </button>
+          </div>
+        )}
+      </div>
+      <style>{`@keyframes dash-spin { to { transform: rotate(360deg); } }`}</style>
+    </>
   );
 }
