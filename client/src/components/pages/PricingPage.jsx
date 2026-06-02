@@ -1,5 +1,9 @@
-import { Link } from "react-router-dom";
-import { Check, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Check, Sparkles, Loader2 } from "lucide-react";
+import { useAuth } from "@clerk/clerk-react";
+import toast from "react-hot-toast";
+import { api } from "../../lib/api";
 
 const PLANS = [
   {
@@ -31,6 +35,34 @@ const PLANS = [
 ];
 
 export default function PricingPage() {
+  const { isSignedIn, getToken } = useAuth();
+  const navigate = useNavigate();
+  const [checkingOut, setCheckingOut] = useState(false);
+
+  const handleProClick = async () => {
+    if (!isSignedIn) {
+      navigate("/sign-up");
+      return;
+    }
+
+    setCheckingOut(true);
+    try {
+      const data = await api.post("/api/billing/create-checkout-session", {
+        getToken,
+      });
+      window.location.href = data.url;
+    } catch (err) {
+      if (err.code === "ALREADY_PRO") {
+        toast.error("You're already on the Pro plan.");
+        navigate("/dashboard");
+      } else {
+        toast.error("Failed to start checkout. Please try again.");
+      }
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-20 px-6">
       <div className="max-w-4xl mx-auto">
@@ -91,12 +123,20 @@ export default function PricingPage() {
               </ul>
 
               {plan.highlighted ? (
-                <Link
-                  to="/dashboard"
-                  className="block w-full text-center py-3 rounded-lg bg-gray-900 text-white font-medium hover:bg-gray-800"
+                <button
+                  onClick={handleProClick}
+                  disabled={checkingOut}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-900 text-white font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  Get started
-                </Link>
+                  {checkingOut ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Redirecting...
+                    </>
+                  ) : (
+                    "Get started"
+                  )}
+                </button>
               ) : (
                 <Link
                   to="/dashboard"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
@@ -11,17 +11,22 @@ import {
   Loader2,
   Inbox,
 } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import { api } from "../../lib/api";
 import { useAuth } from "@clerk/clerk-react";
+
+const PAGE_SIZE = 20;
 
 export default function HistoryPage() {
   const navigate = useNavigate();
   const [emails, setEmails] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [copiedKey, setCopiedKey] = useState(null);
   const { getToken } = useAuth();
@@ -31,27 +36,47 @@ export default function HistoryPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const fetchEmails = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (favoritesOnly) params.set("favorites", "true");
-
-      const data = await api.get(`/api/emails?${params.toString()}`, {
-        getToken,
-      });
-      setEmails(data.emails);
-    } catch {
-      toast.error("Failed to load email history");
-    } finally {
-      setLoading(false);
-    }
+  // Reset to first page whenever filters change
+  useEffect(() => {
+    setOffset(0);
+    setEmails([]);
   }, [debouncedSearch, favoritesOnly]);
 
+  // Fetch — replaces list on first page, appends on subsequent pages
   useEffect(() => {
-    fetchEmails();
-  }, [fetchEmails]);
+    let cancelled = false;
+    const appending = offset > 0;
+
+    if (appending) setLoadingMore(true);
+    else setLoading(true);
+
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (favoritesOnly) params.set("favorites", "true");
+    params.set("limit", String(PAGE_SIZE));
+    params.set("offset", String(offset));
+
+    api
+      .get(`/api/emails?${params.toString()}`, { getToken })
+      .then((data) => {
+        if (cancelled) return;
+        setEmails((prev) => (appending ? [...prev, ...data.emails] : data.emails));
+        setHasMore(data.emails.length === PAGE_SIZE);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Failed to load email history");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, favoritesOnly, offset, getToken]);
 
   const handleCopy = async (text, key, emailId) => {
     try {
@@ -109,7 +134,6 @@ export default function HistoryPage() {
 
   return (
     <div>
-      <Toaster position="top-right" />
       <h1 className="text-2xl font-bold text-gray-900">Email history</h1>
       <p className="text-gray-500 mt-1">
         Browse, search, and reuse your past generations.
@@ -309,6 +333,25 @@ export default function HistoryPage() {
               </div>
             );
           })}
+
+          {hasMore && (
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={() => setOffset((prev) => prev + PAGE_SIZE)}
+                disabled={loadingMore}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  "Load more"
+                )}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

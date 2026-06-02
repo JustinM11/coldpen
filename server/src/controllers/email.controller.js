@@ -4,6 +4,12 @@ import { AppError } from "../middleware/errorHandler.js";
 
 const VALID_TONES = ["professional", "casual", "friendly", "bold"];
 
+const MAX_LENGTHS = {
+  productDescription: 1000,
+  targetAudience: 500,
+  ctaGoal: 200,
+};
+
 export const EmailController = {
   async generate(req, res, next) {
     try {
@@ -20,7 +26,29 @@ export const EmailController = {
 
       if (!VALID_TONES.includes(tone)) {
         throw new AppError(
-          "invalid tone. Must be one of: ${VALID_TONES.join(', ')}",
+          `Invalid tone. Must be one of: ${VALID_TONES.join(", ")}`,
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+
+      if (productDescription.trim().length > MAX_LENGTHS.productDescription) {
+        throw new AppError(
+          `Product description must be ${MAX_LENGTHS.productDescription} characters or less`,
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+      if (targetAudience.trim().length > MAX_LENGTHS.targetAudience) {
+        throw new AppError(
+          `Target audience must be ${MAX_LENGTHS.targetAudience} characters or less`,
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+      if (ctaGoal.trim().length > MAX_LENGTHS.ctaGoal) {
+        throw new AppError(
+          `CTA goal must be ${MAX_LENGTHS.ctaGoal} characters or less`,
           400,
           "VALIDATION_ERROR",
         );

@@ -4,7 +4,7 @@ import { EmailModel } from "../models/email.model.js";
 
 const router = Router();
 
-router.get("/dashboard", ...protect, async (req, res) => {
+router.get("/dashboard", ...protect, async (req, res, next) => {
   try {
     const stats = await EmailModel.getStats(req.user.id);
 

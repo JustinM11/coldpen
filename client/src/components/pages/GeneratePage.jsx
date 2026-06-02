@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Wand2, Loader2, Copy, Check, Heart } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import { api } from "../../lib/api";
 import { useAuth } from "@clerk/clerk-react";
 
@@ -19,7 +20,8 @@ const INITIAL_FORM = {
 };
 
 export default function GeneratePage() {
-  const [formData, setFormData] = useState(INITIAL_FORM);
+  const location = useLocation();
+  const [formData, setFormData] = useState(location.state?.prefill ?? INITIAL_FORM);
   const [result, setResult] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -107,7 +109,6 @@ export default function GeneratePage() {
 
   return (
     <div>
-      <Toaster position="top-right" />
       <h1 className="text-2xl font-bold text-gray-900">Generate cold emails</h1>
       <p className="text-gray-500 mt-1">
         Describe your offer and get three high-converting variations.

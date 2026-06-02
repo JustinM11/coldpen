@@ -29,33 +29,25 @@ app.use(
   }),
 );
 
-// Webhook routes (no auth, raw body for Stripe)
+// Raw body for webhook signature verification (must be before express.json())
 app.use("/api/webhooks/stripe", express.raw({ type: "application/json" }));
+app.use("/api/webhooks/clerk", express.raw({ type: "application/json" }));
 
-// Parse JSON  request bodies
+// Parse JSON request bodies
 app.use(express.json());
 
-// Clerk webhook routes (no auth, raw body for verification)
-app.use("/api/webhooks", webhookRoutes);
-
-// API routes
-app.use("/api/emails", emailRoutes);
-
-// User routes (e.g. for fetching user info, usage stats, etc.)
-app.use("/api/users", userRoutes);
-
-// Billing routes (e.g. for creating Stripe checkout sessions)
-app.use("/api/billing", billingRoutes);
-
-// Analytics routes (protected)
-app.use("/api/analytics", analyticsRoutes);
-
-// Clerk authentication middleware
+// Clerk auth — must be before any protected routes
 app.use(clerkMiddleware());
+
+app.use("/api/webhooks", webhookRoutes);
+app.use("/api/emails", emailRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/billing", billingRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString });
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 app.use(errorHandler);

@@ -23,7 +23,7 @@ router.post("/clerk", async (req, res) => {
   let event;
   try {
     const wh = new Webhook(WEBHOOK_SECRET);
-    event = wh.verify(JSON.stringify(req.body), svixHeaders);
+    event = wh.verify(req.body, svixHeaders);
   } catch (err) {
     console.error("Webhook verification failed:", err.message);
     return res.status(400).json({ error: "Invalid webhook signature" });
@@ -84,9 +84,9 @@ router.post("/stripe", async (req, res) => {
 
         await db.query(
           `UPDATE users
-                    SET plan = "pro",
+                    SET plan = 'pro',
                         stripe_customer_id = $1,
-                        stripe_subscription_id = $2
+                        stripe_subscription_id = $2,
                         updated_at = NOW()
                     WHERE id = $3`,
           [customerId, subscriptionId, userId],
@@ -98,25 +98,25 @@ router.post("/stripe", async (req, res) => {
       case "customer.subscription.updated": {
         const subscription = event.data.object;
         if (
-          subscription.status === "active" &&
-          subscription.status !== "trailing"
+          subscription.status !== "active" &&
+          subscription.status !== "trialing"
         ) {
           await db.query(
-            `UPDATE users 
-                        SET plan = "free",
+            `UPDATE users
+                        SET plan = 'free',
                             updated_at = NOW()
                         WHERE stripe_subscription_id = $1`,
             [subscription.id],
           );
-          break;
         }
+        break;
       }
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
         await db.query(
           `UPDATE users
-                        SET plan = "free",
+                        SET plan = 'free',
                         stripe_subscription_id = NULL,
                         updated_at = NOW()
                         WHERE stripe_subscription_id = $1`,
