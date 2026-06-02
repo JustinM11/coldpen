@@ -10,6 +10,27 @@ const pool = new Pool({
 const migration = `
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- Allow NULL email so social-login users without an email can sign in.
+-- The partial unique index enforces uniqueness only for non-null, non-empty values.
+ALTER TABLE IF EXISTS users ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE IF EXISTS users DROP CONSTRAINT IF EXISTS users_email_key;
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique
+  ON users(email) WHERE email IS NOT NULL AND email <> '';
+
+-- Auto-update updated_at on every row change
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS users_set_updated_at ON users;
+CREATE TRIGGER users_set_updated_at
+  BEFORE UPDATE ON users
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     clerk_id VARCHAR(255) UNIQUE NOT NULL,

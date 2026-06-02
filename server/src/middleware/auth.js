@@ -18,11 +18,11 @@ export const attachUser = async (req, res, next) => {
       const newUser = await db.query(
         `INSERT INTO users (clerk_id, email, name)
          VALUES ($1, $2, $3)
-         ON CONFLICT (clerk_id) DO UPDATE SET email = $2
+         ON CONFLICT (clerk_id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name
          RETURNING *`,
         [
           clerkId,
-          authData?.sessionClaims?.email || "",
+          authData?.sessionClaims?.email || null,
           authData?.sessionClaims?.name || "",
         ],
       );

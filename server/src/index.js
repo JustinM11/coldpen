@@ -12,14 +12,30 @@ import webhookRoutes from "./routes/webhook.routes.js";
 import billingRoutes from "./routes/billing.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 
+// Fail fast if required env vars are missing
+const REQUIRED_ENV = [
+  "DATABASE_URL",
+  "CLERK_SECRET_KEY",
+  "ANTHROPIC_API_KEY",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_PRO_PRICE_ID",
+  "CLIENT_URL",
+];
+const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missing.length) {
+  console.error("Missing required environment variables:", missing.join(", "));
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Security headers
 app.use(helmet());
 
-// Request logging
-app.use(morgan("dev"));
+// Request logging — verbose dev format locally, structured combined format in prod
+app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 // CORS - allow frontend to talk to this server
 app.use(

@@ -27,7 +27,7 @@ export const EmailModel = {
 
   async findByUser(
     userId,
-    { limit = 20, offset = 0, favoriteOnly = false, search = "" } = {},
+    { limit = 20, offset = 0, favoriteOnly = false, search = "", tone = "" } = {},
   ) {
     let query = `SELECT * FROM emails WHERE user_id = $1`;
     const params = [userId];
@@ -37,9 +37,15 @@ export const EmailModel = {
       query += ` AND is_favorited = true`;
     }
 
+    if (tone) {
+      query += ` AND tone = $${paramIndex}`;
+      params.push(tone.toLowerCase());
+      paramIndex++;
+    }
+
     if (search) {
       query += ` AND (
-                product_description ILIKE $${paramIndex} 
+                product_description ILIKE $${paramIndex}
                 OR target_audience ILIKE $${paramIndex}
                 OR cta_goal ILIKE $${paramIndex}
             )`;

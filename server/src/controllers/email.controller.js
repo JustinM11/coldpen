@@ -82,13 +82,14 @@ export const EmailController = {
 
   async list(req, res, next) {
     try {
-      const { limit = "20", offset = "0", favorites, search = "" } = req.query;
+      const { limit = "20", offset = "0", favorites, search = "", tone = "" } = req.query;
 
       const emails = await EmailModel.findByUser(req.user.id, {
         limit: Math.min(parseInt(limit, 10) || 20, 100),
         offset: parseInt(offset, 10) || 0,
         favoriteOnly: favorites === "true",
         search,
+        tone,
       });
 
       res.json({ emails, count: emails.length });

@@ -19,7 +19,7 @@ router.post("/create-checkout-session", ...protect, async (req, res, next) => {
       customer_email: req.user.email,
       line_items: [
         {
-          price: process.env.STRIPE_PRICE_ID,
+          price: process.env.STRIPE_PRO_PRICE_ID,
           quantity: 1,
         },
       ],

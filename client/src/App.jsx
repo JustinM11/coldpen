@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { SignedIn, SignedOut, useAuth } from "@clerk/clerk-react";
 import { Toaster } from "react-hot-toast";
 import LandingPage    from "./components/pages/LandingPage";
+import NotFoundPage   from "./components/pages/NotFoundPage";
 import PricingPage    from "./components/pages/PricingPage";
 import AuthPage       from "./components/pages/AuthPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
@@ -52,7 +53,7 @@ export default function App() {
           <Route path="help"         element={<HelpPage />}      />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </>
   );

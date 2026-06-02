@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import {
@@ -18,15 +18,28 @@ const VARIATION_META = [
 function wordCount(text) { return text ? text.trim().split(/\s+/).length : 0; }
 function readSec(words)   { return Math.round(words / 200 * 60); }
 
+const DEFAULTS_KEY = "coldpen-writing-defaults";
+
 export default function GeneratePage() {
   const location = useLocation();
-  const prefill  = location.state?.prefill;
+  const navigate  = useNavigate();
+  const prefill   = location.state?.prefill;
   const { getToken } = useAuth();
 
+  // Show upgrade success toast once after Stripe redirect
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("upgraded") === "true") {
+      toast.success("Welcome to Pro! Unlimited generations unlocked.");
+      navigate("/dashboard", { replace: true });
+    }
+  }, []);
+
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(DEFAULTS_KEY)) || {}; } catch { return {}; } })();
   const [offer,      setOffer]      = useState(prefill?.productDescription || "");
   const [who,        setWho]        = useState(prefill?.targetAudience     || "");
   const [cta,        setCta]        = useState(prefill?.ctaGoal            || "");
-  const [tone,       setTone]       = useState(prefill?.tone ? TONES.find(t => t.toLowerCase() === prefill.tone) || TONES[0] : TONES[0]);
+  const [tone,       setTone]       = useState(prefill?.tone ? TONES.find(t => t.toLowerCase() === prefill.tone) || TONES[0] : (saved.tone ? TONES.find(t => t.toLowerCase() === saved.tone) || TONES[0] : TONES[0]));
   const [result,     setResult]     = useState(null);
   const [loading,    setLoading]    = useState(false);
   const [favorited,  setFavorited]  = useState({});

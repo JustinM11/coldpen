@@ -17,7 +17,7 @@ router.get("/me", ...protect, async (req, res, next) => {
         email: user.email,
         name: user.name,
         plan: user.plan,
-        generationToday: lastDate !== today ? 0 : user.generation_today,
+        generationToday: lastDate !== today ? 0 : user.generations_today,
         generationLimit: user.plan === "pro" ? 1000 : 5,
         stripeCustomerId: user.stripe_customer_id,
         createdAt: user.created_at,
