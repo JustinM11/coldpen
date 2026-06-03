@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SignIn, SignUp } from "@clerk/clerk-react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -75,6 +75,113 @@ const STATS = [
   { n: "5/day", l: "free, no card"        },
 ];
 
+// ── Instant client-side validation for Clerk's drop-in forms ──
+// Clerk's <SignIn>/<SignUp> own the submit and the network request, so a bad
+// email or empty field otherwise waits ~3–5s for Clerk's server to reject it.
+// We intercept the form's submit in the CAPTURE phase — before Clerk's React
+// handler runs — and block the request when these two purely-local checks fail,
+// showing a styled inline error that matches Clerk's own (#B23A22 / 12.5px).
+// Server-only checks (wrong password, duplicate email) are deliberately left to
+// Clerk and still round-trip as before.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ERR_FLAG = "data-coldpen-fielderror"; // marks error nodes we inject
+
+// This app authenticates by email, so the sign-in "identifier" is an email.
+function isEmailField(input) {
+  return input.type === "email" || /email|identifier/i.test(input.name || "");
+}
+
+function fieldGroup(input) {
+  return input.closest(".cl-formField") || input.parentElement;
+}
+
+function clearFieldError(input) {
+  fieldGroup(input)
+    ?.querySelectorAll(`[${ERR_FLAG}]`)
+    .forEach((n) => n.remove());
+}
+
+function showFieldError(input, message) {
+  clearFieldError(input);
+  const err = document.createElement("p");
+  err.setAttribute(ERR_FLAG, "");
+  err.textContent = message;
+  err.style.cssText =
+    "color:#B23A22;font-size:12.5px;line-height:1.4;margin-top:6px;";
+  fieldGroup(input)?.appendChild(err);
+}
+
+// True only for inputs the user can actually see and edit on the CURRENT step.
+// Must be ancestor-aware: Clerk hides the inactive step (e.g. the password field
+// while you're on the email step of Log in) by collapsing a wrapper to height:0
+// with overflow:hidden. The input's own box stays non-zero and its own styles
+// look normal, so a per-element check isn't enough — we walk up to the form.
+function isUserVisible(el) {
+  if (el.type === "hidden" || el.disabled || el.readOnly) return false;
+
+  // Covers display:none / visibility / content-visibility / opacity on the
+  // element and its ancestors, where the browser supports it.
+  if (
+    typeof el.checkVisibility === "function" &&
+    !el.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })
+  ) {
+    return false;
+  }
+
+  // The field must render a box of its own.
+  const rect = el.getBoundingClientRect();
+  if (rect.width <= 1 || rect.height <= 1) return false;
+
+  // Walk ancestors up to the form, catching collapsed/clipped wrappers that hide
+  // the field even though its own rect is non-zero.
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const s = window.getComputedStyle(node);
+    if (s.display === "none" || s.visibility === "hidden" || s.opacity === "0") {
+      return false;
+    }
+    const clips =
+      s.overflow === "hidden" ||
+      s.overflowX === "hidden" ||
+      s.overflowY === "hidden";
+    if (clips) {
+      const r = node.getBoundingClientRect();
+      if (r.width <= 1 || r.height <= 1) return false; // collapsed clipping box
+    }
+    if (node.tagName === "FORM") break;
+  }
+
+  return true;
+}
+
+// Validate only the email + password fields (the inherently-required ones we
+// can check without the server). Returns true when it's safe to let Clerk submit.
+function runLocalValidation(form) {
+  // Scope to Clerk's real field inputs (.cl-formFieldInput) and require them to
+  // be visible. Targeting all <input>s previously matched Clerk's hidden decoy
+  // fields, which read as empty and blocked otherwise-valid submissions.
+  const fields = [...form.querySelectorAll("input.cl-formFieldInput")].filter(
+    (i) => (isEmailField(i) || i.type === "password") && isUserVisible(i),
+  );
+  let firstInvalid = null;
+  for (const input of fields) {
+    clearFieldError(input);
+    const value = input.value.trim();
+    const email = isEmailField(input);
+    if (!value) {
+      showFieldError(input, email ? "Enter your email address." : "Enter your password.");
+      firstInvalid = firstInvalid || input;
+    } else if (email && !EMAIL_RE.test(value)) {
+      showFieldError(input, "Enter a valid email address.");
+      firstInvalid = firstInvalid || input;
+    }
+  }
+  if (firstInvalid) {
+    firstInvalid.focus();
+    return false;
+  }
+  return true;
+}
+
 export default function AuthPage({ mode }) {
   const navigate   = useNavigate();
   const isSignUp   = mode === "signUp";
@@ -90,6 +197,131 @@ export default function AuthPage({ mode }) {
   useEffect(() => {
     const t = setTimeout(() => setFading(false), 30);
     return () => clearTimeout(t);
+  }, [mode]);
+
+  // Clerk's inputs carry the HTML5 `required` attribute, so the browser shows
+  // its native "Please fill out this field." popup on empty submit — before
+  // Clerk's own validation can run. Strip `required` from every field and set
+  // `noValidate` on the form so the browser never runs constraint validation on
+  // ANY input, across both Sign up and Log in (and every step). Clerk then
+  // renders its own inline error text, already styled to match our other field
+  // errors (#B23A22 / 12.5px via CLERK_APPEARANCE.elements.formFieldErrorText).
+  // Removing `required` from the DOM does not disable Clerk's validation — Clerk
+  // validates from its internal state in its submit handler, not the attribute.
+  // Re-applied through a MutationObserver because Clerk re-renders fields and
+  // swaps the form between steps (e.g. sign-in → email verification).
+  const formWrapRef = useRef(null);
+  useEffect(() => {
+    const root = formWrapRef.current;
+    if (!root) return;
+
+    // Timestamp of the last user-driven Continue (click/Enter). Used to detect
+    // password fields that mount as a result of a step transition, so we can
+    // suppress Clerk's autofocus highlight on them — see below.
+    let transitionAt = 0;
+
+    const applyToForms = () => {
+      root.querySelectorAll("form").forEach((form) => {
+        // Belt: turn off native constraint validation so no popup can appear.
+        form.noValidate = true;
+
+        // Attach the instant validator once per form (Clerk swaps forms between
+        // steps; the observer below re-runs this for each new form).
+        if (!form.hasAttribute("data-coldpen-intercept")) {
+          form.setAttribute("data-coldpen-intercept", "");
+
+          // Validate ONLY on a deliberate user submit. Clerk advances between
+          // steps (email → password) by dispatching its own submit, which would
+          // otherwise validate the freshly-shown, still-empty field before the
+          // user has touched it. We arm validation only on a trusted click of
+          // the submit button or a trusted Enter keypress, and disarm on every
+          // submit — so Clerk's programmatic step transitions never validate.
+          let userInitiated = false;
+          const submitButton = 'button[type="submit"], button:not([type])';
+          form.addEventListener(
+            "click",
+            (e) => {
+              if (e.isTrusted && e.target.closest(submitButton)) {
+                userInitiated = true;
+                transitionAt = performance.now(); // a step transition may follow
+              }
+            },
+            true,
+          );
+          form.addEventListener(
+            "keydown",
+            (e) => {
+              if (e.isTrusted && e.key === "Enter") {
+                userInitiated = true;
+                transitionAt = performance.now();
+              }
+            },
+            true,
+          );
+
+          // Capture phase → runs before Clerk's submit handler, so a failed
+          // local check blocks the request entirely (empties never round-trip).
+          form.addEventListener(
+            "submit",
+            (e) => {
+              const intentional = userInitiated;
+              userInitiated = false;
+              if (!intentional) return; // Clerk step transition / programmatic
+              if (!runLocalValidation(form)) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+              }
+            },
+            true,
+          );
+
+          // Clear a field's inline error as soon as the user edits it.
+          form.addEventListener(
+            "input",
+            (e) => {
+              if (e.target instanceof HTMLInputElement) clearFieldError(e.target);
+            },
+            true,
+          );
+        }
+      });
+      // Suppress Clerk's autofocus on a password field that mounts right after a
+      // user-driven step transition (Log in: email → password). Clerk focuses it
+      // on mount, which paints the clay focus border before the user has done
+      // anything. We blur that first (programmatic) focus so the step loads
+      // visually neutral; the user's own later click/tab focuses it normally.
+      // Gated on `transitionAt` so Sign up — where the password field is present
+      // from the start and focused by the user — is never affected.
+      root
+        .querySelectorAll("input.cl-formFieldInput[type='password']")
+        .forEach((pw) => {
+          if (pw.hasAttribute("data-coldpen-nofocus")) return;
+          pw.setAttribute("data-coldpen-nofocus", "");
+          if (performance.now() - transitionAt < 2000) {
+            const blurAutofocus = () => pw.blur();
+            pw.addEventListener("focus", blurAutofocus, { once: true });
+            // If no autofocus arrives shortly, stop listening so a much later
+            // user focus is never blurred.
+            setTimeout(() => pw.removeEventListener("focus", blurAutofocus), 1500);
+          }
+        });
+
+      // Suspenders: strip `required` so the native popup can't fire even in the
+      // brief window before noValidate is applied to a freshly rendered form.
+      root.querySelectorAll("[required]").forEach((field) => {
+        field.required = false;
+      });
+    };
+
+    applyToForms();
+    const observer = new MutationObserver(applyToForms);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["required"],
+    });
+    return () => observer.disconnect();
   }, [mode]);
 
   return (
@@ -208,7 +440,7 @@ export default function AuthPage({ mode }) {
             </p>
 
             {/* ── Clerk form — fixed min-height prevents layout shift ── */}
-            <div style={{
+            <div ref={formWrapRef} style={{
               minHeight: 420,
               opacity:    fading ? 0 : 1,
               transition: "opacity 0.14s ease",

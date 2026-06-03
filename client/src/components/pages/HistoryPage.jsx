@@ -83,6 +83,20 @@ export default function HistoryPage() {
     } catch { toast.error("Failed to delete"); }
   };
 
+  const handleCopy = async (email, e) => {
+    e.stopPropagation();
+    const variations = email.variations || [];
+    if (variations.length === 0) { toast.error("Nothing to copy"); return; }
+    const text = variations
+      .map((v, i) => `Variation ${String.fromCharCode(65 + i)}\nSubject: ${v.subject}\n\n${v.body}`)
+      .join("\n\n———\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      api.patch(`/api/emails/${email.id}/copy`, { getToken }).catch(() => {});
+      toast.success(variations.length > 1 ? "All variations copied" : "Copied to clipboard");
+    } catch { toast.error("Failed to copy"); }
+  };
+
   const handleReopen = (email, e) => {
     e.stopPropagation();
     navigate("/dashboard", {
@@ -164,7 +178,7 @@ export default function HistoryPage() {
                   </div>
                   <div className="hactions">
                     <button className="mini" title="Reopen" onClick={(e) => handleReopen(email, e)}><CornerUpLeft /></button>
-                    <button className="mini" title="Copy" onClick={(e) => { e.stopPropagation(); toast.success("Copied"); }}><Copy /></button>
+                    <button className="mini" title="Copy" onClick={(e) => handleCopy(email, e)}><Copy /></button>
                     <button className="mini danger" title="Delete" onClick={(e) => handleDelete(email.id, e)}><Trash2 /></button>
                   </div>
                 </div>

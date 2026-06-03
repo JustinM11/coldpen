@@ -23,7 +23,10 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Ignore Component-cased and underscore-prefixed names. argsIgnorePattern
+      // covers destructured render props like `({ Icon }) => <Icon />`, which the
+      // base rule can't see being used inside JSX.
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
     },
   },
 ])

@@ -10,10 +10,31 @@ const pool = new Pool({
 const migration = `
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Allow NULL email so social-login users without an email can sign in.
--- The partial unique index enforces uniqueness only for non-null, non-empty values.
-ALTER TABLE IF EXISTS users ALTER COLUMN email DROP NOT NULL;
-ALTER TABLE IF EXISTS users DROP CONSTRAINT IF EXISTS users_email_key;
+-- Tables must be created before anything that references them (indexes,
+-- triggers, ALTERs). email is intentionally nullable so social-login users
+-- without an email can sign in; uniqueness is enforced by the partial index
+-- below, not by a column constraint.
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    clerk_id VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255),
+    name VARCHAR(255) DEFAULT '',
+    plan VARCHAR(20) DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
+    stripe_customer_id VARCHAR(255) UNIQUE,
+    stripe_subscription_id VARCHAR(255) UNIQUE,
+    generations_today       INT DEFAULT 0,
+    last_generation_date    DATE,
+    created_at              TIMESTAMP DEFAULT NOW(),
+    updated_at              TIMESTAMP DEFAULT NOW()
+  );
+
+-- For databases first created under an older schema where email was
+-- NOT NULL / UNIQUE, relax those so social-login users without an email
+-- can sign in. No-ops on a freshly created table.
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
+
+-- Enforce email uniqueness only for non-null, non-empty values.
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique
   ON users(email) WHERE email IS NOT NULL AND email <> '';
 
@@ -30,20 +51,6 @@ DROP TRIGGER IF EXISTS users_set_updated_at ON users;
 CREATE TRIGGER users_set_updated_at
   BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    clerk_id VARCHAR(255) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    name VARCHAR(255) DEFAULT '',
-    plan VARCHAR(20) DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
-    stripe_customer_id VARCHAR(255) UNIQUE,
-    stripe_subscription_id VARCHAR(255) UNIQUE,
-    generations_today       INT DEFAULT 0,
-    last_generation_date    DATE,
-    created_at              TIMESTAMP DEFAULT NOW(),
-    updated_at              TIMESTAMP DEFAULT NOW()
-  );
 
   CREATE TABLE IF NOT EXISTS emails (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -58,6 +58,9 @@ export default function GeneratePage() {
           targetAudience:     who.trim() || "your target audience",
           tone:               tone.toLowerCase(),
           ctaGoal:            cta.trim(),
+          // Sign-off defaults from Settings → Writing defaults.
+          senderName:         saved.senderName || "",
+          signature:          saved.signature || "",
         },
         getToken,
       });
