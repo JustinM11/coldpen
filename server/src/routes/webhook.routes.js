@@ -56,7 +56,9 @@ router.post("/clerk", async (req, res) => {
       }
     }
   } catch (error) {
+    // Return a non-2xx so Clerk retries instead of dropping the event.
     console.error("Webhook handler error:", error.message);
+    return res.status(500).json({ error: "Webhook handler failed" });
   }
 
   res.json({ received: true });
@@ -127,7 +129,10 @@ router.post("/stripe", async (req, res) => {
       }
     }
   } catch (error) {
+    // Return a non-2xx so Stripe retries — critical for checkout.session.completed,
+    // where a dropped event would leave a paying customer un-upgraded.
     console.error("Stripe webhook error:", error.message);
+    return res.status(500).json({ error: "Webhook handler failed" });
   }
 
   res.json({ received: true });

@@ -1,6 +1,7 @@
 import { generateColdEmails } from "../services/ai.service.js";
 import { EmailModel } from "../models/email.model.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { refundGeneration } from "../middleware/rateLimit.js";
 
 const VALID_TONES = ["professional", "casual", "friendly", "bold"];
 
@@ -76,6 +77,16 @@ export const EmailController = {
         rateLimit: req.rateLimitInfo,
       });
     } catch (error) {
+      // rateLimitByPlan already counted this generation. Since the request
+      // failed (validation, AI error, or save failure), give it back so the
+      // user isn't charged a generation for nothing.
+      if (req.rateLimitInfo?.date) {
+        try {
+          await refundGeneration(req.user.id, req.rateLimitInfo.date);
+        } catch (refundError) {
+          console.error("Failed to refund generation:", refundError.message);
+        }
+      }
       next(error);
     }
   },
