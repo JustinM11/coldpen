@@ -37,8 +37,16 @@ You must respond ONLY with valid JSON in this exact format, no markdown, no back
 
 Generate exactly 3 variations. Each must use a DIFFERENT persuasion strategy. Not just rewording — different approaches. For example: one leads with a pain point, one with social proof, one with a provocative question.`;
 
-function getMockResponse() {
-  return {
+// All three mock bodies close with "Best,\nAlex"; swap in the user's own
+// sign-off so MOCK_AI output reflects the configured sender/signature too.
+function applyMockSignoff(body, senderName, signature) {
+  if (signature) return body.replace("Best,\nAlex", signature);
+  if (senderName) return body.replace("Best,\nAlex", `Best,\n${senderName}`);
+  return body;
+}
+
+function getMockResponse({ senderName, signature } = {}) {
+  const response = {
     variations: [
       {
         label: "Pain Point Lead",
@@ -64,6 +72,15 @@ function getMockResponse() {
     ],
     usage: { inputTokens: 0, outputTokens: 0 },
   };
+
+  if (senderName || signature) {
+    response.variations = response.variations.map((v) => ({
+      ...v,
+      body: applyMockSignoff(v.body, senderName, signature),
+    }));
+  }
+
+  return response;
 }
 
 export async function generateColdEmails({
@@ -71,13 +88,26 @@ export async function generateColdEmails({
   targetAudience,
   tone,
   ctaGoal,
+  senderName,
+  signature,
 }) {
   if (!productDescription || !targetAudience || !tone || !ctaGoal) {
     throw new AppError("All fields are required", 400, "VALIDATION_ERROR");
   }
   if (process.env.MOCK_AI === "true") {
-    return getMockResponse();
+    return getMockResponse({ senderName, signature });
   }
+
+  // Optional sign-off instructions from the user's writing defaults.
+  const signoffLines = [];
+  if (senderName) signoffLines.push(`Sign every email from "${senderName}".`);
+  if (signature)
+    signoffLines.push(
+      `End every email body with exactly this signature block, verbatim:\n${signature}`,
+    );
+  const signoffBlock = signoffLines.length
+    ? `\n\nSIGN-OFF:\n${signoffLines.join("\n")}`
+    : "";
 
   const userPrompt = `Generate 3 cold email variations with these parameters:
 
@@ -87,7 +117,7 @@ TARGET AUDIENCE: ${targetAudience}
 
 TONE: ${tone}
 
-CALL-TO-ACTION GOAL: ${ctaGoal}
+CALL-TO-ACTION GOAL: ${ctaGoal}${signoffBlock}
 
 Remember: each variation must use a different persuasion strategy. Respond with JSON only.`;
 

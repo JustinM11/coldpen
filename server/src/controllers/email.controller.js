@@ -9,12 +9,16 @@ const MAX_LENGTHS = {
   productDescription: 1000,
   targetAudience: 500,
   ctaGoal: 200,
+  senderName: 100,
+  signature: 300,
 };
 
 export const EmailController = {
   async generate(req, res, next) {
     try {
       const { productDescription, targetAudience, tone, ctaGoal } = req.body;
+      const senderName = req.body.senderName?.trim() || "";
+      const signature = req.body.signature?.trim() || "";
 
       if (
         !productDescription?.trim() ||
@@ -54,12 +58,28 @@ export const EmailController = {
           "VALIDATION_ERROR",
         );
       }
+      if (senderName.length > MAX_LENGTHS.senderName) {
+        throw new AppError(
+          `Sender name must be ${MAX_LENGTHS.senderName} characters or less`,
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+      if (signature.length > MAX_LENGTHS.signature) {
+        throw new AppError(
+          `Signature must be ${MAX_LENGTHS.signature} characters or less`,
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
 
       const { variations, usage } = await generateColdEmails({
         productDescription: productDescription.trim(),
         targetAudience: targetAudience.trim(),
         tone,
         ctaGoal: ctaGoal.trim(),
+        senderName,
+        signature,
       });
 
       const savedEmail = await EmailModel.create({

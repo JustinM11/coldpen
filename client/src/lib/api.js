@@ -32,10 +32,17 @@ async function request(method, path, { body, getToken } = {}) {
     return null; // No content
   }
 
-  const data = await response.json();
+  // Tolerate non-JSON bodies (e.g. a proxy 5xx HTML page) instead of throwing
+  // an opaque SyntaxError that masks the real status.
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    if (response.ok) return null;
+  }
 
   if (!response.ok) {
-    const error = new Error(data.error || "Something went wrong");
+    const error = new Error(data.error || `Request failed (${response.status})`);
     error.status = response.status;
     error.code = data.code;
     throw error;

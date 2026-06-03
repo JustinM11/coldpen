@@ -1,14 +1,10 @@
 import { db } from "../config/database.js";
-
-const PLAN_LIMITS = {
-  free: 5,
-  pro: 1000,
-};
+import { limitForPlan } from "../config/plans.js";
 
 export const rateLimitByPlan = async (req, res, next) => {
   try {
     const user = req.user;
-    const limit = PLAN_LIMITS[user.plan] || PLAN_LIMITS.free;
+    const limit = limitForPlan(user.plan);
     const today = new Date().toISOString().split("T")[0];
 
     // Atomic check-and-increment: the WHERE clause only matches when the user

@@ -1,5 +1,6 @@
-import e, { Router } from "express";
+import { Router } from "express";
 import { protect } from "../middleware/auth.js";
+import { limitForPlan } from "../config/plans.js";
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get("/me", ...protect, async (req, res, next) => {
         name: user.name,
         plan: user.plan,
         generationToday: lastDate !== today ? 0 : user.generations_today,
-        generationLimit: user.plan === "pro" ? 1000 : 5,
+        generationLimit: limitForPlan(user.plan),
         stripeCustomerId: user.stripe_customer_id,
         createdAt: user.created_at,
       },
