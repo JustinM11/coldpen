@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
@@ -22,11 +22,12 @@ function loadDefaults() {
 export default function SettingsPage() {
   const { getToken } = useAuth();
   const { user }     = useUser();
-  const scrollRef    = useRef(null);
 
   const [userInfo,    setUserInfo]    = useState(null);
   const [activeSec,   setActiveSec]   = useState("profile");
   const [portalBusy,  setPortalBusy]  = useState(false);
+  const [fullName,    setFullName]    = useState("");
+  const [saving,      setSaving]      = useState(false);
 
   // Writing defaults — load from localStorage
   const saved = loadDefaults();
@@ -41,6 +42,12 @@ export default function SettingsPage() {
       .catch(() => {});
   }, []);
 
+  // Seed the editable name from Clerk once the user object is available.
+  // Re-runs after a successful user.update() (new user ref) with the same value.
+  useEffect(() => {
+    if (user) setFullName(user.fullName || userInfo?.name || "");
+  }, [user]);
+
   const name   = user?.fullName || userInfo?.name || "";
   const email  = user?.primaryEmailAddress?.emailAddress || userInfo?.email || "";
   const plan   = userInfo?.plan ?? "free";
@@ -49,14 +56,29 @@ export default function SettingsPage() {
   const avatar = user?.imageUrl;
 
   const scrollTo = (id) => {
-    const el = document.getElementById(id);
-    if (el && scrollRef.current) scrollRef.current.scrollTo({ top: el.offsetTop - 20, behavior: "smooth" });
     setActiveSec(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const handleSave = () => {
-    localStorage.setItem(DEFAULTS_KEY, JSON.stringify({ tone: defaultTone, senderName, signature, notifs }));
-    toast.success("Settings saved");
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // Writing defaults / notifications live in localStorage.
+      localStorage.setItem(DEFAULTS_KEY, JSON.stringify({ tone: defaultTone, senderName, signature, notifs }));
+
+      // Push the profile name to Clerk (source of truth) only when it changed.
+      const trimmed = fullName.trim();
+      if (user && trimmed && trimmed !== (user.fullName || "")) {
+        const [first, ...rest] = trimmed.split(/\s+/);
+        await user.update({ firstName: first, lastName: rest.join(" ") });
+      }
+
+      toast.success("Settings saved");
+    } catch (err) {
+      toast.error(err?.errors?.[0]?.message || "Could not save your changes. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePortal = async () => {
@@ -78,17 +100,19 @@ export default function SettingsPage() {
           <div className="sub">Manage your account, plan, and writing defaults.</div>
         </div>
         <div className="topbar-right">
-          <button className="btn btn-ghost" style={{ fontSize: 14, padding: "10px 16px" }}
-            onClick={() => { const s = loadDefaults(); setDefTone(s.tone || "Professional"); setSenderName(s.senderName || ""); setSignature(s.signature || ""); }}>
+          <button className="btn btn-ghost" style={{ fontSize: 14, padding: "10px 16px" }} disabled={saving}
+            onClick={() => { const s = loadDefaults(); setDefTone(s.tone || "Professional"); setSenderName(s.senderName || ""); setSignature(s.signature || ""); setFullName(user?.fullName || userInfo?.name || ""); }}>
             Discard
           </button>
-          <button className="btn btn-primary" style={{ fontSize: 14, padding: "10px 18px" }} onClick={handleSave}>
-            <Check style={{ width: 16, height: 16 }} /> Save changes
+          <button className="btn btn-primary" style={{ fontSize: 14, padding: "10px 18px" }} onClick={handleSave} disabled={saving}>
+            {saving
+              ? <><Loader2 style={{ width: 16, height: 16, animation: "dash-spin .7s linear infinite" }} /> Saving…</>
+              : <><Check style={{ width: 16, height: 16 }} /> Save changes</>}
           </button>
         </div>
       </header>
 
-      <div className="page" ref={scrollRef}>
+      <div className="page">
         <div className="set-wrap">
           {/* Sub-nav */}
           <nav className="set-nav">
@@ -111,7 +135,7 @@ export default function SettingsPage() {
               </div>
               <div className="frow">
                 <div className="fl">Full name</div>
-                <input className="inp" type="text" defaultValue={name} />
+                <input className="inp" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} />
               </div>
               <div className="frow">
                 <div className="fl">Email <small>Used to sign in</small></div>
@@ -195,13 +219,13 @@ export default function SettingsPage() {
               <div className="sect-head"><h2>Danger zone</h2><p>Irreversible account actions.</p></div>
               <div className="danger-row" style={{ paddingBottom: 16, borderBottom: "1px solid var(--line-soft)", marginBottom: 16 }}>
                 <div className="dr-l"><b>Export all data</b><p>Download every brief, draft, and favorite as a JSON file.</p></div>
-                <button className="btn btn-ghost" style={{ fontSize: 13.5 }}>
+                <button className="btn btn-ghost" style={{ fontSize: 13.5 }} onClick={() => toast("Data export is coming soon.")}>
                   <Download style={{ width: 15, height: 15 }} /> Export
                 </button>
               </div>
               <div className="danger-row">
                 <div className="dr-l"><b>Delete account</b><p>Permanently remove your account and all saved drafts. This can't be undone.</p></div>
-                <button className="btn btn-danger" style={{ fontSize: 13.5 }}>Delete account</button>
+                <button className="btn btn-danger" style={{ fontSize: 13.5 }} onClick={() => toast("Account deletion is coming soon. Email support to remove your account today.")}>Delete account</button>
               </div>
             </section>
           </div>

@@ -26,7 +26,20 @@ async function request(method, path, { body, getToken } = {}) {
     config.body = JSON.stringify(body);
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, config);
+  // `redirect: "manual"` so an auth redirect doesn't get silently followed to
+  // the SPA's HTML shell (which would parse as null and look like a generic
+  // failure). A protected route with no valid session makes Clerk's
+  // requireAuth() respond with a 3xx redirect to sign-in.
+  const response = await fetch(`${BASE_URL}${path}`, { ...config, redirect: "manual" });
+
+  // An opaque redirect (or any 3xx) on an API call means we're not
+  // authenticated — surface it as a clean 401 instead of a confusing parse error.
+  if (response.type === "opaqueredirect" || (response.status >= 300 && response.status < 400)) {
+    const error = new Error("Your session has expired. Please sign in again.");
+    error.status = 401;
+    error.code = "UNAUTHENTICATED";
+    throw error;
+  }
 
   if (response.status === 204) {
     return null; // No content

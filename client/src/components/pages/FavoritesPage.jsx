@@ -19,10 +19,12 @@ export default function FavoritesPage() {
   const [chip,    setChip]    = useState("All strategies");
 
   useEffect(() => {
+    let cancelled = false;
     api.get("/api/emails?favorites=true&limit=100", { getToken })
-      .then((d) => setEmails(d.emails))
-      .catch(() => toast.error("Failed to load favorites"))
-      .finally(() => setLoading(false));
+      .then((d) => { if (!cancelled) setEmails(d.emails); })
+      .catch(() => { if (!cancelled) toast.error("Failed to load favorites"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const handleUnfavorite = async (emailId) => {

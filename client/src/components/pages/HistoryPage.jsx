@@ -114,7 +114,7 @@ export default function HistoryPage() {
           <div className="sub">Every brief you've run — search, reopen, reuse.</div>
         </div>
         <div className="topbar-right">
-          <button className="icon-btn" title="Export"><Download /></button>
+          <button className="icon-btn" title="Export" onClick={() => toast("History export is coming soon.")}><Download /></button>
           <Link className="btn btn-primary" to="/dashboard" style={{ fontSize: 14, padding: "11px 18px" }}>
             <Plus style={{ width: 16, height: 16 }} /> New brief
           </Link>

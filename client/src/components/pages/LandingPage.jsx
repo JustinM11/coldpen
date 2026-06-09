@@ -440,18 +440,9 @@ export default function LandingPage() {
             <div>
               <h4>Company</h4>
               <ul>
-                <li><a href="#">About</a></li>
-                <li><a href="#">Blog</a></li>
-                <li><a href="#">Careers</a></li>
-                <li><a href="#">Contact</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4>Legal</h4>
-              <ul>
-                <li><a href="#">Privacy</a></li>
-                <li><a href="#">Terms</a></li>
-                <li><a href="#">Security</a></li>
+                <li><a href="mailto:help@coldpen.app">Contact</a></li>
+                <li><Link to="/sign-in">Log in</Link></li>
+                <li><Link to="/sign-up">Start free</Link></li>
               </ul>
             </div>
           </div>

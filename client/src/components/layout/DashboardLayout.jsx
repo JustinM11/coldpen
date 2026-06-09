@@ -92,7 +92,7 @@ function SidebarContent({ used, cap, plan, name, email, avatar, compact, onNavCl
           </span>
           {!compact && (
             <>
-              <div>
+              <div className="uc-meta">
                 <div className="nm">{name || "—"}</div>
                 <div className="em">{email}</div>
               </div>
@@ -188,7 +188,7 @@ export default function DashboardLayout() {
       className="app"
       style={{
         fontFamily: "var(--font-sans)",
-        gridTemplateColumns: `${sideWidth}px 1fr`,
+        "--side-w": `${sideWidth}px`,
         userSelect: dragging ? "none" : undefined,
         cursor: dragging ? "col-resize" : undefined,
       }}
