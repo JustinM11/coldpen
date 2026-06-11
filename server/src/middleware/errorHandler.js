@@ -8,6 +8,14 @@ export class AppError extends Error {
 }
 
 export const errorHandler = (err, req, res, next) => {
+  // express.json() throws this for malformed bodies; without the special case
+  // it falls through as a 400 with the message "Internal server error".
+  if (err.type === "entity.parse.failed") {
+    return res
+      .status(400)
+      .json({ error: "Invalid JSON in request body", code: "INVALID_JSON" });
+  }
+
   const statusCode = err.statusCode || 500;
   const message = err.isOperational ? err.message : "Internal server error";
 

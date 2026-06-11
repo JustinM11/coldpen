@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { SignedIn, SignedOut, useAuth } from "@clerk/clerk-react";
 import { Toaster } from "react-hot-toast";
+import Spinner        from "./components/Spinner";
 import LandingPage    from "./components/pages/LandingPage";
 import NotFoundPage   from "./components/pages/NotFoundPage";
 import PricingPage    from "./components/pages/PricingPage";
@@ -18,8 +19,7 @@ function ProtectedRoute({ children }) {
   if (!isLoaded) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--paper)" }}>
-        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--line)", borderTopColor: "var(--clay)", animation: "dash-spin .8s linear infinite" }} />
-        <style>{`@keyframes dash-spin { to { transform: rotate(360deg); } }`}</style>
+        <Spinner />
       </div>
     );
   }

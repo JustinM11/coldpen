@@ -332,6 +332,7 @@ html { scroll-behavior: smooth; }
 .var-panel { display: none; }
 .var-panel.on { display: block; animation: cp-fade .35s ease; }
 @keyframes cp-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes dash-spin { to { transform: rotate(360deg); } }
 .strategy-badge { display: inline-block; font-size: 11.5px; font-weight: 600; color: var(--amber); background: #FBF1DD; border: 1px solid #F0DEB8; padding: 5px 11px; border-radius: 7px; margin-bottom: 14px; }
 .field-cap { display: block; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .email-subject { font-weight: 600; font-size: 14.5px; color: var(--ink); margin: 4px 0 14px; }

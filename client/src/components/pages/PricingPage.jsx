@@ -7,13 +7,7 @@ import {
   Check, Minus, Lock, Loader2,
 } from "lucide-react";
 import { api } from "../../lib/api";
-
-const NibLogo = ({ fill = "#C2683F" }) => (
-  <svg viewBox="0 0 24 24" fill="none">
-    <path d="M12 3 L18 12 L12 16 L6 12 Z" fill={fill} />
-    <path d="M12 16 V21" stroke={fill} strokeWidth="2" strokeLinecap="round" />
-  </svg>
-);
+import NibLogo from "../NibLogo";
 
 const FREE_FEATURES = [
   "5 generations per day",
@@ -197,7 +191,7 @@ export default function PricingPage() {
                 style={{ opacity: checkingOut ? 0.6 : 1, cursor: checkingOut ? "not-allowed" : "pointer" }}
               >
                 {checkingOut ? (
-                  <><Loader2 style={{ width: 16, height: 16, animation: "spin 1s linear infinite" }} /> Redirecting...</>
+                  <><Loader2 style={{ width: 16, height: 16, animation: "dash-spin 1s linear infinite" }} /> Redirecting...</>
                 ) : (
                   <>Go Pro <ArrowRight /></>
                 )}
@@ -302,10 +296,6 @@ export default function PricingPage() {
           </div>
         </div>
       </footer>
-
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

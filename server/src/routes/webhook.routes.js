@@ -1,10 +1,20 @@
 import { Router } from "express";
 import { Webhook } from "svix";
-import Stripe from "stripe";
 import { db } from "../config/database.js";
+import { stripe, isAlreadyCanceled } from "../config/stripe.js";
 
 const router = Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Clerk events list every address on the account; resolve the primary one.
+function primaryEmail(data) {
+  const list = data.email_addresses || [];
+  const primary = list.find((e) => e.id === data.primary_email_address_id);
+  return (primary || list[0])?.email_address || "";
+}
+
+function fullName(data) {
+  return [data.first_name, data.last_name].filter(Boolean).join(" ");
+}
 
 router.post("/clerk", async (req, res) => {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
@@ -33,23 +43,37 @@ router.post("/clerk", async (req, res) => {
 
   try {
     switch (type) {
-      case "user.created": {
-        const email = data.email_addresses?.[0]?.email_address || "";
-        const name = [data.first_name, data.last_name]
-          .filter(Boolean)
-          .join(" ");
-
+      case "user.created":
+      case "user.updated": {
+        // Same upsert for both: created inserts the row, updated keeps the
+        // local email/name in sync when they change in Clerk.
         await db.query(
           `INSERT INTO users (clerk_id, email, name)
                     VALUES ($1, $2, $3)
                     ON CONFLICT (clerk_id) DO UPDATE SET email = $2, name = $3`,
-          [data.id, email, name],
+          [data.id, primaryEmail(data), fullName(data)],
         );
-        console.log("User created:", email);
+        console.log(`Webhook ${type}:`, data.id);
         break;
       }
 
       case "user.deleted": {
+        // Cancel any live subscription before the row (and with it the
+        // subscription id) disappears — otherwise a user deleted from the
+        // Clerk dashboard keeps getting billed with no record of why.
+        // Throwing here returns a 500 so Clerk retries the event.
+        const existing = await db.query(
+          "SELECT stripe_subscription_id FROM users WHERE clerk_id = $1",
+          [data.id],
+        );
+        const subscriptionId = existing.rows[0]?.stripe_subscription_id;
+        if (subscriptionId) {
+          try {
+            await stripe.subscriptions.cancel(subscriptionId);
+          } catch (err) {
+            if (!isAlreadyCanceled(err)) throw err;
+          }
+        }
         await db.query("DELETE FROM users WHERE clerk_id = $1", [data.id]);
         console.log("User deleted:", data.id);
         break;
@@ -98,19 +122,18 @@ router.post("/stripe", async (req, res) => {
       }
 
       case "customer.subscription.updated": {
+        // Mirror the subscription status both ways: downgrade on past_due /
+        // unpaid / canceled, but also restore 'pro' when a lapsed payment
+        // recovers and the subscription returns to active.
         const subscription = event.data.object;
-        if (
-          subscription.status !== "active" &&
-          subscription.status !== "trialing"
-        ) {
-          await db.query(
-            `UPDATE users
-                        SET plan = 'free',
-                            updated_at = NOW()
-                        WHERE stripe_subscription_id = $1`,
-            [subscription.id],
-          );
-        }
+        const isActive = ["active", "trialing"].includes(subscription.status);
+        await db.query(
+          `UPDATE users
+                      SET plan = $1,
+                          updated_at = NOW()
+                      WHERE stripe_subscription_id = $2`,
+          [isActive ? "pro" : "free", subscription.id],
+        );
         break;
       }
 

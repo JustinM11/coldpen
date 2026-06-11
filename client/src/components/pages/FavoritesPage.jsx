@@ -4,12 +4,11 @@ import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { Search, FileText, Copy, Heart, Plus } from "lucide-react";
 import { api } from "../../lib/api";
+import { STRATEGY_META } from "../../lib/strategies";
+import Spinner from "../Spinner";
 
 const STRAT_CHIPS = ["All strategies", "Pain-point", "Social-proof", "Value prop"];
-const STRAT_MAP   = ["A", "B", "C"];
-const VLETTER_CLS = ["", "b", "c"];
-const VSTRAT_LABELS = ["Pain-point lead", "Social-proof hook", "Direct value prop"];
-const VNAME_LABELS  = ["Name the problem first", "Borrow credibility", "Get to the point"];
+const PAGE_SIZE = 50;
 
 export default function FavoritesPage() {
   const { getToken } = useAuth();
@@ -17,15 +16,26 @@ export default function FavoritesPage() {
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState("");
   const [chip,    setChip]    = useState("All strategies");
+  const [offset,  setOffset]  = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
+  // Paged like History — previously this fetched a single page of 100 and
+  // silently dropped any favorites beyond it.
   useEffect(() => {
     let cancelled = false;
-    api.get("/api/emails?favorites=true&limit=100", { getToken })
-      .then((d) => { if (!cancelled) setEmails(d.emails); })
+    const appending = offset > 0;
+
+    api.get(`/api/emails?favorites=true&limit=${PAGE_SIZE}&offset=${offset}`, { getToken })
+      .then((d) => {
+        if (cancelled) return;
+        setEmails((p) => appending ? [...p, ...d.emails] : d.emails);
+        setHasMore(d.emails.length === PAGE_SIZE);
+      })
       .catch(() => { if (!cancelled) toast.error("Failed to load favorites"); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) { setLoading(false); setLoadingMore(false); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [offset]);
 
   const handleUnfavorite = async (emailId) => {
     try {
@@ -99,9 +109,7 @@ export default function FavoritesPage() {
         </div>
 
         {loading ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: "64px 0" }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--line)", borderTopColor: "var(--clay)", animation: "dash-spin .8s linear infinite" }} />
-          </div>
+          <Spinner padded />
         ) : filtered.length === 0 ? (
           <div className="panel" style={{ padding: "64px 32px", textAlign: "center" }}>
             <p style={{ fontFamily: "var(--font-serif)", fontSize: "1.2rem", fontWeight: 500, color: "var(--ink)" }}>
@@ -120,15 +128,17 @@ export default function FavoritesPage() {
           </div>
         ) : (
           <div className="fav-grid">
-            {filtered.map(({ email, variation, idx }) => (
+            {filtered.map(({ email, variation, idx }) => {
+              const m = STRATEGY_META[idx] ?? STRATEGY_META[0];
+              return (
               <article key={`${email.id}-${idx}`} className="fcard">
                 <div className="fcard-top">
-                  <span className={`vletter${VLETTER_CLS[idx] ? ` ${VLETTER_CLS[idx]}` : ""}`}>
-                    {STRAT_MAP[idx]}
+                  <span className={`vletter${m.cls ? ` ${m.cls}` : ""}`}>
+                    {m.letter}
                   </span>
                   <div>
-                    <div className="vstrat">{VSTRAT_LABELS[idx]}</div>
-                    <div className="vname">{VNAME_LABELS[idx]}</div>
+                    <div className="vstrat">{variation.label || m.strat}</div>
+                    <div className="vname">{m.name}</div>
                   </div>
                   <div className="fav-acts">
                     <button
@@ -152,11 +162,23 @@ export default function FavoritesPage() {
                   </button>
                 </div>
               </article>
-            ))}
+              );
+            })}
+          </div>
+        )}
+
+        {hasMore && !loading && (
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 16 }}>
+            <button
+              className="btn btn-ghost"
+              disabled={loadingMore}
+              onClick={() => { setLoadingMore(true); setOffset((p) => p + PAGE_SIZE); }}
+            >
+              {loadingMore ? "Loading…" : "Load more favorites"}
+            </button>
           </div>
         )}
       </div>
-      <style>{`@keyframes dash-spin { to { transform: rotate(360deg); } }`}</style>
     </>
   );
 }

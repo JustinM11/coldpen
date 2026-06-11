@@ -1,40 +1,42 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { useAuth, useUser } from "@clerk/clerk-react";
+import { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth, useUser, useClerk } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
-import { Check, Zap, Download, ExternalLink, Loader2 } from "lucide-react";
+import { Check, Zap, Download, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { api } from "../../lib/api";
+import { initials, downloadJson } from "../../lib/utils";
+import { loadWritingDefaults, saveWritingDefaults } from "../../lib/writingDefaults";
 
 const TONES      = ["Professional", "Casual", "Friendly", "Bold"];
 const SECTIONS   = ["Profile", "Plan & billing", "Writing defaults", "Notifications", "Danger zone"];
 const SEC_IDS    = ["profile", "plan", "defaults", "notifications", "danger"];
-const DEFAULTS_KEY = "coldpen-writing-defaults";
 
-function initials(name) {
-  if (!name) return "?";
-  return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-}
-
-function loadDefaults() {
-  try { return JSON.parse(localStorage.getItem(DEFAULTS_KEY)) || {}; } catch { return {}; }
-}
+const DEFAULT_NOTIFS = { updates: true, recap: true, limit: false, tips: true };
+const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
 
 export default function SettingsPage() {
   const { getToken } = useAuth();
   const { user }     = useUser();
+  const { signOut }  = useClerk();
+  const navigate     = useNavigate();
 
   const [userInfo,    setUserInfo]    = useState(null);
   const [activeSec,   setActiveSec]   = useState("profile");
   const [portalBusy,  setPortalBusy]  = useState(false);
   const [fullName,    setFullName]    = useState("");
   const [saving,      setSaving]      = useState(false);
+  const [uploading,   setUploading]   = useState(false);
+  const [exporting,   setExporting]   = useState(false);
+  const [deleteOpen,  setDeleteOpen]  = useState(false);
+  const [deleting,    setDeleting]    = useState(false);
+  const avatarInputRef = useRef(null);
 
   // Writing defaults — load from localStorage
-  const saved = loadDefaults();
-  const [defaultTone, setDefTone]   = useState(saved.tone        || "Professional");
+  const saved = loadWritingDefaults();
+  const [defaultTone, setDefTone]    = useState(saved.tone        || "Professional");
   const [senderName,  setSenderName] = useState(saved.senderName  || "");
   const [signature,   setSignature]  = useState(saved.signature   || "");
-  const [notifs,      setNotifs]     = useState(saved.notifs || { updates: true, recap: true, limit: false, tips: true });
+  const [notifs,      setNotifs]     = useState(saved.notifs || DEFAULT_NOTIFS);
 
   useEffect(() => {
     api.get("/api/users/me", { getToken })
@@ -60,11 +62,20 @@ export default function SettingsPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const handleDiscard = () => {
+    const s = loadWritingDefaults();
+    setDefTone(s.tone || "Professional");
+    setSenderName(s.senderName || "");
+    setSignature(s.signature || "");
+    setNotifs(s.notifs || DEFAULT_NOTIFS);
+    setFullName(user?.fullName || userInfo?.name || "");
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       // Writing defaults / notifications live in localStorage.
-      localStorage.setItem(DEFAULTS_KEY, JSON.stringify({ tone: defaultTone, senderName, signature, notifs }));
+      saveWritingDefaults({ tone: defaultTone, senderName, signature, notifs });
 
       // Push the profile name to Clerk (source of truth) only when it changed.
       const trimmed = fullName.trim();
@@ -81,6 +92,31 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAvatarPick = () => avatarInputRef.current?.click();
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file.");
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      toast.error("Image must be 10 MB or smaller.");
+      return;
+    }
+    setUploading(true);
+    try {
+      await user.setProfileImage({ file });
+      toast.success("Profile photo updated");
+    } catch {
+      toast.error("Could not upload that image. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handlePortal = async () => {
     setPortalBusy(true);
     try {
@@ -89,6 +125,29 @@ export default function SettingsPage() {
     } catch {
       toast.error("Could not open billing portal. Please try again.");
       setPortalBusy(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await api.get("/api/users/export", { getToken });
+      downloadJson(`coldpen-export-${new Date().toISOString().slice(0, 10)}.json`, data);
+      toast.success("Your data has been exported");
+    } catch { toast.error("Failed to export your data"); }
+    finally { setExporting(false); }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await api.delete("/api/users/me", { getToken });
+      // The Clerk user is gone; end the local session and leave the app.
+      await signOut();
+      navigate("/", { replace: true });
+    } catch {
+      toast.error("Could not delete your account. Please try again or email support.");
+      setDeleting(false);
     }
   };
 
@@ -101,7 +160,7 @@ export default function SettingsPage() {
         </div>
         <div className="topbar-right">
           <button className="btn btn-ghost" style={{ fontSize: 14, padding: "10px 16px" }} disabled={saving}
-            onClick={() => { const s = loadDefaults(); setDefTone(s.tone || "Professional"); setSenderName(s.senderName || ""); setSignature(s.signature || ""); setFullName(user?.fullName || userInfo?.name || ""); }}>
+            onClick={handleDiscard}>
             Discard
           </button>
           <button className="btn btn-primary" style={{ fontSize: 14, padding: "10px 18px" }} onClick={handleSave} disabled={saving}>
@@ -130,7 +189,12 @@ export default function SettingsPage() {
                 <div className="fl">Avatar</div>
                 <div className="avatar-row">
                   <span className="big-av">{avatar ? <img src={avatar} alt={name} /> : initials(name)}</span>
-                  <button className="btn btn-ghost" style={{ fontSize: 13.5, padding: "9px 15px" }}>Upload image</button>
+                  <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarUpload} />
+                  <button className="btn btn-ghost" style={{ fontSize: 13.5, padding: "9px 15px" }} onClick={handleAvatarPick} disabled={uploading}>
+                    {uploading
+                      ? <><Loader2 style={{ width: 14, height: 14, animation: "dash-spin .7s linear infinite" }} /> Uploading…</>
+                      : "Upload image"}
+                  </button>
                 </div>
               </div>
               <div className="frow">
@@ -138,8 +202,9 @@ export default function SettingsPage() {
                 <input className="inp" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} />
               </div>
               <div className="frow">
-                <div className="fl">Email <small>Used to sign in</small></div>
-                <input className="inp" type="email" defaultValue={email} />
+                <div className="fl">Email <small>Managed by your login provider</small></div>
+                <input className="inp" type="email" value={email} disabled readOnly
+                  style={{ opacity: 0.65, cursor: "not-allowed" }} title="Your sign-in email can't be changed here" />
               </div>
             </section>
 
@@ -219,20 +284,45 @@ export default function SettingsPage() {
               <div className="sect-head"><h2>Danger zone</h2><p>Irreversible account actions.</p></div>
               <div className="danger-row" style={{ paddingBottom: 16, borderBottom: "1px solid var(--line-soft)", marginBottom: 16 }}>
                 <div className="dr-l"><b>Export all data</b><p>Download every brief, draft, and favorite as a JSON file.</p></div>
-                <button className="btn btn-ghost" style={{ fontSize: 13.5 }} onClick={() => toast("Data export is coming soon.")}>
-                  <Download style={{ width: 15, height: 15 }} /> Export
+                <button className="btn btn-ghost" style={{ fontSize: 13.5 }} onClick={handleExport} disabled={exporting}>
+                  {exporting
+                    ? <><Loader2 style={{ width: 15, height: 15, animation: "dash-spin .7s linear infinite" }} /> Exporting…</>
+                    : <><Download style={{ width: 15, height: 15 }} /> Export</>}
                 </button>
               </div>
               <div className="danger-row">
                 <div className="dr-l"><b>Delete account</b><p>Permanently remove your account and all saved drafts. This can't be undone.</p></div>
-                <button className="btn btn-danger" style={{ fontSize: 13.5 }} onClick={() => toast("Account deletion is coming soon. Email support to remove your account today.")}>Delete account</button>
+                <button className="btn btn-danger" style={{ fontSize: 13.5 }} onClick={() => setDeleteOpen(true)}>Delete account</button>
               </div>
             </section>
           </div>
         </div>
       </div>
 
-      <style>{`@keyframes dash-spin { to { transform: rotate(360deg); } }`}</style>
+      {/* Delete account confirmation */}
+      <div
+        className={`modal-scrim${deleteOpen ? " open" : ""}`}
+        onClick={(e) => { if (e.target === e.currentTarget && !deleting) setDeleteOpen(false); }}
+      >
+        <div className="modal-box" role="dialog" aria-modal="true">
+          <div className="m-ic"><Trash2 /></div>
+          <h3>Delete your account?</h3>
+          <p>
+            This permanently removes <b>{email}</b>, every brief, every draft, and every
+            favorite. There is no way to recover them afterwards.
+          </p>
+          <div className="m-acts">
+            <button className="btn btn-ghost" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Keep my account
+            </button>
+            <button className="btn btn-danger" onClick={handleDeleteAccount} disabled={deleting}>
+              {deleting
+                ? <><Loader2 style={{ width: 15, height: 15, animation: "dash-spin .7s linear infinite" }} /> Deleting…</>
+                : "Delete forever"}
+            </button>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

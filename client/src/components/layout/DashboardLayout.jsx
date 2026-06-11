@@ -6,6 +6,8 @@ import {
   LogOut, Zap, ArrowRight, Menu, X,
 } from "lucide-react";
 import { api } from "../../lib/api";
+import { initials } from "../../lib/utils";
+import { USER_CHANGED_EVENT } from "../../lib/userEvents";
 
 const NAV = [
   { sec: "Workspace" },
@@ -22,11 +24,6 @@ const MIN_WIDTH     = 180;
 const MAX_WIDTH     = 400;
 const DEFAULT_WIDTH = 256;
 const STORAGE_KEY   = "coldpen-sidebar-width";
-
-function initials(name) {
-  if (!name) return "?";
-  return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-}
 
 // ── Shared sidebar content used by both the desktop .side and mobile drawer ──
 function SidebarContent({ used, cap, plan, name, email, avatar, compact, onNavClick, onLogout }) {
@@ -122,9 +119,26 @@ export default function DashboardLayout() {
   const dragStart  = useRef(null);
 
   useEffect(() => {
-    api.get("/api/users/me", { getToken })
-      .then((d) => setUserInfo(d.user))
-      .catch(() => {});
+    let cancelled = false;
+    const fetchMe = () =>
+      api.get("/api/users/me", { getToken })
+        .then((d) => { if (!cancelled) setUserInfo(d.user); })
+        .catch(() => {});
+
+    fetchMe();
+
+    // Keep the usage meter live: GeneratePage emits this after every
+    // generation (with fresh counts) and after a Pro upgrade (without detail,
+    // which triggers a refetch).
+    const onUserChanged = (e) => {
+      if (e.detail) setUserInfo((prev) => (prev ? { ...prev, ...e.detail } : prev));
+      else fetchMe();
+    };
+    window.addEventListener(USER_CHANGED_EVENT, onUserChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(USER_CHANGED_EVENT, onUserChanged);
+    };
   }, []);
 
   // Close drawer on Escape

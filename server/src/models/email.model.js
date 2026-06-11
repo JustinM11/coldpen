@@ -49,7 +49,9 @@ export const EmailModel = {
                 OR target_audience ILIKE $${paramIndex}
                 OR cta_goal ILIKE $${paramIndex}
             )`;
-      params.push(`%${search}%`);
+      // Escape LIKE wildcards so a search for "100%" or "a_b" matches those
+      // literal characters instead of acting as a pattern.
+      params.push(`%${search.replace(/([\\%_])/g, "\\$1")}%`);
       paramIndex++;
     }
 
@@ -100,7 +102,7 @@ export const EmailModel = {
 
   async getStats(userId) {
     const result = await db.query(
-      `SELECT 
+      `SELECT
                 COUNT(*) as total_generation,
                 COUNT(*) FILTER (WHERE is_favorited = true) as total_favorited,
                 COALESCE(SUM(copied_count), 0) as total_copied
@@ -109,5 +111,74 @@ export const EmailModel = {
       [userId],
     );
     return result.rows[0];
+  },
+
+  // Aggregates for the analytics dashboard. Dates are serialized with to_char
+  // so they cross the pg driver as plain YYYY-MM-DD strings — a DATE parsed
+  // into a JS Date shifts by a day when serialized on a non-UTC server.
+  async getAnalytics(userId) {
+    const [daily, tones, months, activeDays, topCopied] = await Promise.all([
+      db.query(
+        `SELECT to_char(created_at::date, 'YYYY-MM-DD') AS day, COUNT(*)::int AS count
+           FROM emails
+          WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '14 days'
+          GROUP BY 1`,
+        [userId],
+      ),
+      db.query(
+        `SELECT tone, COUNT(*)::int AS count
+           FROM emails
+          WHERE user_id = $1
+          GROUP BY tone
+          ORDER BY count DESC`,
+        [userId],
+      ),
+      db.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW()))::int AS this_month,
+           COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW()) - INTERVAL '1 month'
+                              AND created_at <  date_trunc('month', NOW()))::int AS last_month
+         FROM emails
+         WHERE user_id = $1`,
+        [userId],
+      ),
+      db.query(
+        `SELECT DISTINCT to_char(created_at::date, 'YYYY-MM-DD') AS day
+           FROM emails
+          WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '90 days'
+          ORDER BY 1`,
+        [userId],
+      ),
+      db.query(
+        `SELECT id, product_description, tone, copied_count
+           FROM emails
+          WHERE user_id = $1 AND copied_count > 0
+          ORDER BY copied_count DESC, created_at DESC
+          LIMIT 3`,
+        [userId],
+      ),
+    ]);
+
+    return {
+      daily: daily.rows,
+      tones: tones.rows,
+      thisMonth: months.rows[0].this_month,
+      lastMonth: months.rows[0].last_month,
+      activeDays: activeDays.rows.map((r) => r.day),
+      topCopied: topCopied.rows,
+    };
+  },
+
+  // Everything the user owns, for the JSON data export.
+  async findAllByUser(userId) {
+    const result = await db.query(
+      `SELECT id, product_description, target_audience, tone, cta_goal,
+              variations, is_favorited, copied_count, created_at
+         FROM emails
+        WHERE user_id = $1
+        ORDER BY created_at DESC`,
+      [userId],
+    );
+    return result.rows;
   },
 };

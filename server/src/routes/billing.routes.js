@@ -1,10 +1,9 @@
 import { Router } from "express";
-import Stripe from "stripe";
 import { protect } from "../middleware/auth.js";
 import { AppError } from "../middleware/errorHandler.js";
+import { stripe } from "../config/stripe.js";
 
 const router = Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 router.post("/create-checkout-session", ...protect, async (req, res, next) => {
   try {
@@ -16,7 +15,14 @@ router.post("/create-checkout-session", ...protect, async (req, res, next) => {
       mode: "subscription",
       payment_method_types: ["card"],
       client_reference_id: req.user.id,
-      customer_email: req.user.email,
+      // Reuse the existing Stripe customer when there is one (e.g. a user who
+      // cancelled and is re-upgrading) — otherwise Stripe creates a duplicate
+      // customer per checkout. Stripe rejects passing both fields at once.
+      ...(req.user.stripe_customer_id
+        ? { customer: req.user.stripe_customer_id }
+        : req.user.email
+          ? { customer_email: req.user.email }
+          : {}),
       line_items: [
         {
           price: process.env.STRIPE_PRO_PRICE_ID,

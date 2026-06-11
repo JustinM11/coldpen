@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
@@ -6,19 +6,18 @@ import {
   Sparkles, RefreshCw, Heart, Copy, Type, Clock, History, Plus,
 } from "lucide-react";
 import { api } from "../../lib/api";
+import { loadWritingDefaults } from "../../lib/writingDefaults";
+import { STRATEGY_META } from "../../lib/strategies";
+import { emitUserChanged } from "../../lib/userEvents";
 
 const TONES = ["Professional", "Casual", "Friendly", "Bold"];
-
-const VARIATION_META = [
-  { letter: "A", cls: "",  strat: "Pain-point lead",   name: "Name the problem first" },
-  { letter: "B", cls: "b", strat: "Social-proof hook",  name: "Borrow credibility"     },
-  { letter: "C", cls: "c", strat: "Direct value prop",  name: "Get to the point"       },
-];
 
 function wordCount(text) { return text ? text.trim().split(/\s+/).length : 0; }
 function readSec(words)   { return Math.round(words / 200 * 60); }
 
-const DEFAULTS_KEY = "coldpen-writing-defaults";
+function toneOrDefault(saved) {
+  return TONES.find((t) => t.toLowerCase() === saved) || TONES[0];
+}
 
 export default function GeneratePage() {
   const location = useLocation();
@@ -26,23 +25,26 @@ export default function GeneratePage() {
   const prefill   = location.state?.prefill;
   const { getToken } = useAuth();
 
-  // Show upgrade success toast once after Stripe redirect
+  // Show upgrade success toast once after Stripe redirect. The ref guards
+  // against StrictMode's double effect run firing the toast twice in dev.
+  const upgradeHandled = useRef(false);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get("upgraded") === "true") {
+    if (params.get("upgraded") === "true" && !upgradeHandled.current) {
+      upgradeHandled.current = true;
       toast.success("Welcome to Pro! Unlimited generations unlocked.");
+      emitUserChanged(); // sidebar refetches /me to pick up the new plan
       navigate("/dashboard", { replace: true });
     }
   }, []);
 
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(DEFAULTS_KEY)) || {}; } catch { return {}; } })();
   const [offer,      setOffer]      = useState(prefill?.productDescription || "");
   const [who,        setWho]        = useState(prefill?.targetAudience     || "");
   const [cta,        setCta]        = useState(prefill?.ctaGoal            || "");
-  const [tone,       setTone]       = useState(prefill?.tone ? TONES.find(t => t.toLowerCase() === prefill.tone) || TONES[0] : (saved.tone ? TONES.find(t => t.toLowerCase() === saved.tone) || TONES[0] : TONES[0]));
+  const [tone,       setTone]       = useState(() => toneOrDefault(prefill?.tone || loadWritingDefaults().tone));
   const [result,     setResult]     = useState(null);
   const [loading,    setLoading]    = useState(false);
-  const [favorited,  setFavorited]  = useState({});
+  const [favorited,  setFavorited]  = useState(false);
   const [copied,     setCopied]     = useState({});
 
   const generate = async () => {
@@ -52,35 +54,51 @@ export default function GeneratePage() {
     }
     setLoading(true);
     try {
+      // Read sign-off defaults at click time so an edit in Settings applies
+      // to the very next generation without remounting this page.
+      const saved = loadWritingDefaults();
       const data = await api.post("/api/emails/generate", {
         body: {
           productDescription: offer.trim(),
           targetAudience:     who.trim() || "your target audience",
           tone:               tone.toLowerCase(),
           ctaGoal:            cta.trim(),
-          // Sign-off defaults from Settings → Writing defaults.
           senderName:         saved.senderName || "",
           signature:          saved.signature || "",
         },
         getToken,
       });
       setResult(data);
-      setFavorited({});
+      setFavorited(false);
       setCopied({});
+      if (data.rateLimit) {
+        emitUserChanged({
+          generationToday: data.rateLimit.limit - data.rateLimit.remaining,
+          generationLimit: data.rateLimit.limit,
+          plan: data.rateLimit.plan,
+        });
+      }
     } catch (err) {
-      if (err.status === 429) toast.error("Daily limit reached. Upgrade to Pro for unlimited generations.");
-      else toast.error(err.message || "Failed to generate — please try again.");
+      if (err.status === 429) {
+        toast.error("Daily limit reached. Upgrade to Pro for unlimited generations.");
+        emitUserChanged(); // meter may be stale — sync it with the server
+      } else {
+        toast.error(err.message || "Failed to generate — please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFavorite = async (idx) => {
+  // Favoriting applies to the whole brief (all three variations share one DB
+  // row), so all hearts reflect the same flag — per-card hearts previously
+  // drifted out of sync with each other and with the server.
+  const handleFavorite = async () => {
     if (!result) return;
     try {
       const data = await api.patch(`/api/emails/${result.email.id}/favorite`, { getToken });
-      setFavorited((p) => ({ ...p, [idx]: data.email.is_favorited }));
-      toast.success(data.email.is_favorited ? "Saved to favorites" : "Removed from favorites");
+      setFavorited(data.email.is_favorited);
+      toast.success(data.email.is_favorited ? "Brief saved to favorites" : "Removed from favorites");
     } catch { toast.error("Failed to update"); }
   };
 
@@ -195,7 +213,7 @@ export default function GeneratePage() {
             </div>
           )}
 
-          {loading && VARIATION_META.map((m) => (
+          {loading && STRATEGY_META.map((m) => (
             <article key={m.letter} className="vcard">
               <div className="vcard-top">
                 <span className={`vletter${m.cls ? ` ${m.cls}` : ""}`}>{m.letter}</span>
@@ -211,7 +229,7 @@ export default function GeneratePage() {
           ))}
 
           {!loading && variations.map((v, idx) => {
-            const m     = VARIATION_META[idx] ?? VARIATION_META[0];
+            const m     = STRATEGY_META[idx] ?? STRATEGY_META[0];
             const words = wordCount(v.body);
             const secs  = readSec(words);
             return (
@@ -224,10 +242,10 @@ export default function GeneratePage() {
                   </div>
                   <div className="vcard-acts">
                     <button
-                      className={`mini fav${favorited[idx] ? " on" : ""}`}
-                      title="Favorite"
-                      onClick={() => handleFavorite(idx)}
-                    ><Heart style={{ width: 16, height: 16, fill: favorited[idx] ? "currentColor" : "none" }} /></button>
+                      className={`mini fav${favorited ? " on" : ""}`}
+                      title={favorited ? "Remove brief from favorites" : "Favorite this brief"}
+                      onClick={handleFavorite}
+                    ><Heart style={{ width: 16, height: 16, fill: favorited ? "currentColor" : "none" }} /></button>
                   </div>
                 </div>
                 <div className="vcard-body">
@@ -262,8 +280,6 @@ export default function GeneratePage() {
           )}
         </section>
       </div>
-
-      <style>{`@keyframes dash-spin { to { transform: rotate(360deg); } }`}</style>
     </>
   );
 }

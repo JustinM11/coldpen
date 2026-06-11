@@ -4,6 +4,8 @@ import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { Search, Download, Plus, CornerUpLeft, Copy, Trash2 } from "lucide-react";
 import { api } from "../../lib/api";
+import { downloadJson } from "../../lib/utils";
+import Spinner from "../Spinner";
 
 const PAGE_SIZE = 20;
 const CHIPS = ["All", "Favorited", "Professional", "Casual", "Friendly", "Bold"];
@@ -42,6 +44,8 @@ export default function HistoryPage() {
   const [offset,   setOffset]   = useState(0);
   const [hasMore,  setHasMore]  = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // email pending delete confirmation
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebSearch(search), 300);
@@ -74,13 +78,25 @@ export default function HistoryPage() {
     return () => { cancelled = true; };
   }, [debSearch, chip, offset]);
 
-  const handleDelete = async (id, e) => {
-    e.stopPropagation();
+  const confirmDelete = async () => {
+    const id = deleteTarget?.id;
+    if (!id) return;
+    setDeleteTarget(null);
     try {
       await api.delete(`/api/emails/${id}`, { getToken });
       setEmails((p) => p.filter((x) => x.id !== id));
       toast.success("Brief deleted");
     } catch { toast.error("Failed to delete"); }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const data = await api.get("/api/users/export", { getToken });
+      downloadJson(`coldpen-history-${new Date().toISOString().slice(0, 10)}.json`, data);
+      toast.success("History exported");
+    } catch { toast.error("Failed to export history"); }
+    finally { setExporting(false); }
   };
 
   const handleCopy = async (email, e) => {
@@ -114,7 +130,7 @@ export default function HistoryPage() {
           <div className="sub">Every brief you've run — search, reopen, reuse.</div>
         </div>
         <div className="topbar-right">
-          <button className="icon-btn" title="Export" onClick={() => toast("History export is coming soon.")}><Download /></button>
+          <button className="icon-btn" title="Export history as JSON" onClick={handleExport} disabled={exporting}><Download /></button>
           <Link className="btn btn-primary" to="/dashboard" style={{ fontSize: 14, padding: "11px 18px" }}>
             <Plus style={{ width: 16, height: 16 }} /> New brief
           </Link>
@@ -140,9 +156,7 @@ export default function HistoryPage() {
         </div>
 
         {loading ? (
-          <div style={{ display: "flex", justifyContent: "center", padding: "64px 0" }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid var(--line)", borderTopColor: "var(--clay)", animation: "dash-spin .8s linear infinite" }} />
-          </div>
+          <Spinner padded />
         ) : emails.length === 0 ? (
           <div className="panel" style={{ padding: "64px 32px", textAlign: "center" }}>
             <p style={{ fontFamily: "var(--font-serif)", fontSize: "1.2rem", fontWeight: 500, color: "var(--ink)" }}>
@@ -179,7 +193,7 @@ export default function HistoryPage() {
                   <div className="hactions">
                     <button className="mini" title="Reopen" onClick={(e) => handleReopen(email, e)}><CornerUpLeft /></button>
                     <button className="mini" title="Copy" onClick={(e) => handleCopy(email, e)}><Copy /></button>
-                    <button className="mini danger" title="Delete" onClick={(e) => handleDelete(email.id, e)}><Trash2 /></button>
+                    <button className="mini danger" title="Delete" onClick={(e) => { e.stopPropagation(); setDeleteTarget(email); }}><Trash2 /></button>
                   </div>
                 </div>
               ))}
@@ -199,7 +213,25 @@ export default function HistoryPage() {
           </div>
         )}
       </div>
-      <style>{`@keyframes dash-spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* Delete confirmation — deleting a brief removes all three variations permanently */}
+      <div
+        className={`modal-scrim${deleteTarget ? " open" : ""}`}
+        onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
+      >
+        <div className="modal-box" role="dialog" aria-modal="true">
+          <div className="m-ic"><Trash2 /></div>
+          <h3>Delete this brief?</h3>
+          <p>
+            "{(deleteTarget?.product_description || "").slice(0, 80)}{(deleteTarget?.product_description || "").length > 80 ? "…" : ""}"
+            and all three of its variations will be permanently removed. This can't be undone.
+          </p>
+          <div className="m-acts">
+            <button className="btn btn-ghost" onClick={() => setDeleteTarget(null)}>Keep it</button>
+            <button className="btn btn-primary" onClick={confirmDelete}>Delete brief</button>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

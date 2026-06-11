@@ -6,6 +6,7 @@ import {
   PencilLine, SlidersHorizontal, Sparkles,
   Layers, Copy, Heart, History, BarChart3, ShieldCheck, Check,
 } from "lucide-react";
+import NibLogo from "../NibLogo";
 
 const VARIATIONS = [
   {
@@ -62,13 +63,6 @@ const FAQS = [
   { q: "Which AI writes the emails?",                   a: "Every draft is generated with Anthropic's Claude, which is particularly strong at natural, on-tone writing that doesn't read like a template." },
   { q: "Can I reuse a past email?",                     a: "Yes. Every generation is saved to your searchable history. Reuse the original inputs with one click, then tweak and regenerate." },
 ];
-
-const NibLogo = ({ fill = "#C2683F" }) => (
-  <svg viewBox="0 0 24 24" fill="none">
-    <path d="M12 3 L18 12 L12 16 L6 12 Z" fill={fill} />
-    <path d="M12 16 V21" stroke={fill} strokeWidth="2" strokeLinecap="round" />
-  </svg>
-);
 
 export default function LandingPage() {
   const { isSignedIn } = useAuth();

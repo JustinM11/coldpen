@@ -113,14 +113,18 @@ export const EmailController = {
 
   async list(req, res, next) {
     try {
-      const { limit = "20", offset = "0", favorites, search = "", tone = "" } = req.query;
+      // Repeated query keys (?tone=a&tone=b) arrive as arrays; coerce to
+      // strings so they can't throw. Clamp limit/offset to sane non-negative
+      // bounds so values like ?offset=-5 never reach Postgres as errors.
+      const str = (v) => (typeof v === "string" ? v : "");
+      const { favorites } = req.query;
 
       const emails = await EmailModel.findByUser(req.user.id, {
-        limit: Math.min(parseInt(limit, 10) || 20, 100),
-        offset: parseInt(offset, 10) || 0,
+        limit: Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100),
+        offset: Math.max(parseInt(req.query.offset, 10) || 0, 0),
         favoriteOnly: favorites === "true",
-        search,
-        tone,
+        search: str(req.query.search),
+        tone: str(req.query.tone),
       });
 
       res.json({ emails, count: emails.length });
