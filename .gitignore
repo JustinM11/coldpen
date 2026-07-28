@@ -1,3 +1,8 @@
 node_modules/
 .env
 *.log
+
+# Local deploy planning docs (not part of the repo)
+DEPLOY.md
+DEPLOY_PLAN.md
+PROJECT_STATE.md
