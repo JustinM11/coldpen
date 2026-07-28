@@ -16,6 +16,7 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 const REQUIRED_ENV = [
   "DATABASE_URL",
   "CLERK_SECRET_KEY",
+  "CLERK_WEBHOOK_SECRET",
   "ANTHROPIC_API_KEY",
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",

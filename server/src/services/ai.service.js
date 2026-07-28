@@ -123,8 +123,8 @@ Remember: each variation must use a different persuasion strategy. Respond with 
 
   try {
     const response = await client.messages.create({
-      model: process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514",
-      max_tokens: 2000,
+      model: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
+      max_tokens: 1500,
       temperature: 0.7,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],

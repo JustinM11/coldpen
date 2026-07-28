@@ -79,7 +79,11 @@ export default function GeneratePage() {
         });
       }
     } catch (err) {
-      if (err.status === 429) {
+      if (err.code === "AI_RATE_LIMIT") {
+        // Upstream Anthropic rate limit — not the user's quota. Telling a Pro
+        // user to "upgrade" here would be nonsense.
+        toast.error("The AI service is busy right now — try again in a moment.");
+      } else if (err.status === 429) {
         toast.error("Daily limit reached. Upgrade to Pro for unlimited generations.");
         emitUserChanged(); // meter may be stale — sync it with the server
       } else {

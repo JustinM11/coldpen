@@ -358,9 +358,9 @@ export default function LandingPage() {
               <span className="per">per month · effectively unlimited</span>
               <ul>
                 <li><Check /> Up to 1,000 generations a day</li>
-                <li><Check /> Priority generation speed</li>
                 <li><Check /> Full analytics dashboard</li>
                 <li><Check /> Unlimited favorites &amp; history</li>
+                <li><Check /> Billing portal · cancel anytime</li>
               </ul>
               <div className="spacer" />
               <Link className="btn btn-light btn-block" to="/pricing">Go Pro</Link>
@@ -434,7 +434,7 @@ export default function LandingPage() {
             <div>
               <h4>Company</h4>
               <ul>
-                <li><a href="mailto:help@coldpen.app">Contact</a></li>
+                <li><a href="https://github.com/JustinM11" target="_blank" rel="noreferrer">Contact</a></li>
                 <li><Link to="/sign-in">Log in</Link></li>
                 <li><Link to="/sign-up">Start free</Link></li>
               </ul>

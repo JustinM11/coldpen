@@ -18,11 +18,11 @@ const FREE_FEATURES = [
 ];
 
 const PRO_FEATURES = [
-  "Up to 1,000 generations a day",
+  "1,000 generations a day (vs 5 on Free)",
   "Everything in Free",
-  "Priority generation speed",
   "Full analytics dashboard",
   "Unlimited favorites & history",
+  "Stripe billing portal · cancel anytime",
 ];
 
 const TABLE_ROWS = [
@@ -32,15 +32,13 @@ const TABLE_ROWS = [
   { label: "Tones",                    free: "All 4",    pro: "All 4",       type: "val" },
   { label: "One-click copy",           free: true,       pro: true,          type: "bool" },
   { label: "Favorites & history",      free: true,       pro: true,          type: "bool" },
-  { label: "Priority generation speed", free: false,     pro: true,          type: "bool" },
   { label: "Analytics dashboard",      free: false,      pro: true,          type: "bool" },
-  { label: "Email support",            free: false,      pro: true,          type: "bool" },
+  { label: "Billing portal · cancel anytime", free: false, pro: true,        type: "bool" },
 ];
 
 const FAQS = [
   { q: "Can I cancel anytime?",                    a: "Yes. Manage or cancel your subscription in one click from your billing portal. You keep Pro access until the end of the period you've paid for, then drop back to Free." },
   { q: "What happens when I hit the Free daily limit?", a: "Your counter resets every day. If you need more before then, upgrading to Pro lifts you to 1,000 generations a day instantly." },
-  { q: "Do you offer annual billing?",             a: "Pro is billed monthly at $29 today. Annual pricing is on the roadmap — reach out if you'd like to be notified." },
   { q: "Is my payment secure?",                    a: "All payments are handled by Stripe. ColdPen never sees or stores your full card details." },
 ];
 
@@ -284,7 +282,7 @@ export default function PricingPage() {
             <div>
               <h4>Company</h4>
               <ul>
-                <li><a href="mailto:help@coldpen.app">Contact</a></li>
+                <li><a href="https://github.com/JustinM11" target="_blank" rel="noreferrer">Contact</a></li>
                 <li><Link to="/sign-in">Log in</Link></li>
                 <li><Link to="/sign-up">Start free</Link></li>
               </ul>

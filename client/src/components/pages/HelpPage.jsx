@@ -17,7 +17,7 @@ const FAQS = [
   { cat: "billing", q: "How do I cancel Pro?",                          a: "Settings → Plan & billing → Manage subscription. You keep Pro features until the end of your billing period, then drop back to Free with all your drafts intact." },
 ];
 
-const SUPPORT_EMAIL = "help@coldpen.app";
+const GITHUB_URL = "https://github.com/JustinM11";
 
 export default function HelpPage() {
   const [query,     setQuery]     = useState("");
@@ -57,7 +57,7 @@ export default function HelpPage() {
           <div className="sub">Guides, answers, and a real human when you need one.</div>
         </div>
         <div className="topbar-right">
-          <a className="btn btn-primary" href={`mailto:${SUPPORT_EMAIL}`} style={{ fontSize: 14, padding: "11px 18px" }}>
+          <a className="btn btn-primary" href={GITHUB_URL} target="_blank" rel="noreferrer" style={{ fontSize: 14, padding: "11px 18px" }}>
             <MessageCircle style={{ width: 16, height: 16 }} /> Contact support
           </a>
         </div>
@@ -122,7 +122,7 @@ export default function HelpPage() {
               {filtered.length === 0 ? (
                 <p style={{ padding: "26px 0", color: "var(--muted)", fontSize: 14.5 }}>
                   No articles match that search. Try a different term, or{" "}
-                  <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: "var(--clay)", fontWeight: 600 }}>email support</a>.
+                  <a href={GITHUB_URL} target="_blank" rel="noreferrer" style={{ color: "var(--clay)", fontWeight: 600 }}>reach out on GitHub</a>.
                 </p>
               ) : (
                 filtered.map(({ q: question, a }, i) => (
@@ -139,9 +139,9 @@ export default function HelpPage() {
             <h3>Still stuck?</h3>
             <p>Our team replies to most messages within a few hours, Monday to Friday.</p>
 
-            <a className="contact-item" href={`mailto:${SUPPORT_EMAIL}`} style={{ textDecoration: "none" }}>
+            <a className="contact-item" href={GITHUB_URL} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
               <span className="ci-ic"><Mail /></span>
-              <div><b>Email support</b><small>{SUPPORT_EMAIL}</small></div>
+              <div><b>GitHub</b><small>github.com/JustinM11</small></div>
               <span className="arw"><ArrowUpRight /></span>
             </a>
 

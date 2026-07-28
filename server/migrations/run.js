@@ -5,6 +5,8 @@ const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // Managed Postgres (Neon/Supabase/Render) requires TLS; local dev does not.
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 const migration = `
