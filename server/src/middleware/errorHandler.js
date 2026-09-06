@@ -16,14 +16,18 @@ export const errorHandler = (err, req, res, next) => {
       .json({ error: "Invalid JSON in request body", code: "INVALID_JSON" });
   }
 
-  const statusCode = err.statusCode || 500;
+  // Only trust the status code on errors we created deliberately.
+  // Third-party SDK errors (Stripe, Clerk) can carry a misleading statusCode
+  // like 400, which would otherwise hide a real server-side failure.
+  const statusCode = err.isOperational ? err.statusCode || 500 : 500;
   const message = err.isOperational ? err.message : "Internal server error";
 
-  if (statusCode >= 500) {
+  // Log every non-operational error, not just 500+, so silent SDK failures
+  // (e.g. a wrong STRIPE_PRO_PRICE_ID) actually appear in the server log.
+  if (!err.isOperational || statusCode >= 500) {
     console.error("Server Error:", req.method, req.originalUrl);
     console.error(err.message);
   }
-
   res.status(statusCode).json({
     error: message,
     code: err.code || "INTERNAL_ERROR",

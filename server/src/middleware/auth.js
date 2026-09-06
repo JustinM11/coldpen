@@ -18,7 +18,7 @@ export const attachUser = async (req, res, next) => {
       const newUser = await db.query(
         `INSERT INTO users (clerk_id, email, name)
          VALUES ($1, $2, $3)
-         ON CONFLICT (clerk_id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name
+         ON CONFLICT (clerk_id) DO UPDATE SET email = COALESCE(EXCLUDED.email, users.email), name = COALESCE(NULLIF(EXCLUDED.name, ''), users.name)
          RETURNING *`,
         [
           clerkId,
