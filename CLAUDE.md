@@ -29,7 +29,7 @@ There is no test suite.
 
 `server/.env` and `client/.env` are required. The server will crash on startup if `DATABASE_URL` is missing or the database is unreachable. Set `MOCK_AI=true` in `server/.env` to skip real Claude API calls during local development — the mock returns fixed variations with zero token usage.
 
-The Claude model is read from the `CLAUDE_MODEL` env var in `server/src/services/ai.service.js`, falling back to `"claude-sonnet-4-20250514"` when unset.
+The Claude model is read from the `CLAUDE_MODEL` env var in `server/src/services/ai.service.js`, falling back to `"claude-haiku-4-5"` when unset.
 
 ## Architecture
 
