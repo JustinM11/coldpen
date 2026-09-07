@@ -1,6 +1,13 @@
 # ColdPen ✒️
 
-AI-powered cold outreach email writer. Generate 3 high-converting cold email variations in seconds.
+**Live app:** https://coldpen-pink.vercel.app
+
+AI-powered cold outreach email writer. Describe your product, audience, tone,
+and goal — get three high-converting email variations in seconds, each using a
+different persuasion strategy.
+
+> The backend runs on Render's free tier, kept warm by an uptime monitor, so it
+> should load instantly.
 
 ## What It Does
 
