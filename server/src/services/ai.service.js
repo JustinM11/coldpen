@@ -139,8 +139,17 @@ Remember: each variation must use a different persuasion strategy. Respond with 
 
     const parsed = JSON.parse(cleaned);
 
-    if (!parsed.variations || parsed.variations.length !== 3) {
-      throw new Error("Invalid response structure");
+    const valid =
+      parsed.variations?.length === 3 &&
+      parsed.variations.every(
+        (v) => v.subject && v.body && v.label && v.strategy,
+      );
+    if (!valid) {
+      throw new AppError(
+        "AI generated an invalid response. Please try again.",
+        502,
+        "AI_PARSE_ERROR",
+      );
     }
 
     const usage = {
